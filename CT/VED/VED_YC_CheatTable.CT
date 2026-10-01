@@ -1,0 +1,1145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"======== VED 辅助 CT（YC 版） v1.0.2 ========"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>2</ID>
+      <Description>"【游戏版本】VED 0.0.1865（buildID 1880 / client_version 0.0.1865_7e178fd）—— 仅适用于此版本"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>3</ID>
+      <Description>"【CT版本】v1.0.2    【制作日期】2026-10-01    【作者】YC"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>4</ID>
+      <Description>"【环境要求】Cheat Engine 7.5 或更新版本；运行时不需要 Mono/IL2CPP 功能，任何电脑均可使用"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>5</ID>
+      <Description>"【用法】1.用CE附加到 ved.exe  2.勾选 [★1][★2][★3]  3.数值条目双击改值，可勾选冻结"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>6</ID>
+      <Description>"【原理】全部使用 AOB 特征码定位 + 代码注入，不含任何硬编码地址；取消勾选会自动还原原始字节"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>7</ID>
+      <Description>"【兼容性】仅限上述游戏版本；游戏更新后特征码可能失效，需要重新定位。不同电脑同一版本通用"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>8</ID>
+      <Description>"【注意】本表会注册 pPlayerController / pEnemyController 符号，与其它CT冲突时请二选一"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>9</ID>
+      <Description>"【致谢】数据结构与思路参考社区作者公开的CT，感谢社区作者的探索与分享"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>100</ID>
+      <Description>"[★1] 无限格挡 / 自动弹反（无CD，代码级）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(PCUPD,GameAssembly.dll,48 89 5C 24 08 57 48 83 EC 40 80 3D ?? ?? ?? ?? 00 48 8B D9 75 ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 48 8B BB 98 00 00 00 83 B9 E0 00 00 00 00)
+alloc(newmem,$1000,PCUPD)
+alloc(pPlayerController,8,PCUPD)
+alloc(blockOn,1,PCUPD)
+alloc(animSpeedMul,4,PCUPD)
+registersymbol(pPlayerController)
+registersymbol(blockOn)
+registersymbol(animSpeedMul)
+label(code)
+label(return)
+label(skipBlock)
+label(skipAnim)
+
+newmem:
+  mov [pPlayerController],rcx
+  push rax
+  cmp byte ptr [blockOn],00
+  je skipBlock
+  mov byte ptr [rcx+000001A4],01
+skipBlock:
+  mov rax,[rcx+00000078]
+  test rax,rax
+  je skipAnim
+  movss xmm0,[animSpeedMul]
+  movss [rax+00000050],xmm0
+skipAnim:
+  pop rax
+code:
+  mov [rsp+08],rbx
+  push rdi
+  sub rsp,40
+  jmp return
+
+PCUPD:
+  jmp newmem
+  nop 5
+return:
+registersymbol(PCUPD)
+
+pPlayerController:
+  dq 0
+blockOn:
+  db 01
+animSpeedMul:
+  dd (float)2.0
+
+[DISABLE]
+PCUPD:
+  db 48 89 5C 24 08 57 48 83 EC 40
+unregistersymbol(PCUPD)
+unregistersymbol(pPlayerController)
+unregistersymbol(blockOn)
+unregistersymbol(animSpeedMul)
+dealloc(newmem)
+dealloc(pPlayerController)
+dealloc(blockOn)
+dealloc(animSpeedMul)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>101</ID>
+      <Description>"[★2] 敌人定身 / 不再攻击（对所有敌人生效；取消勾选会自动恢复）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(ECUPD,GameAssembly.dll,48 89 5C 24 10 57 48 81 EC 80 00 00 00 80 3D ?? ?? ?? ?? 00 48 8B D9 75 ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 48 8B 7B 38 83 B9 E0 00 00 00 00)
+alloc(newmem2,$1000,ECUPD)
+alloc(pEnemyController,8,ECUPD)
+alloc(enemyKlass,8,ECUPD)
+alloc(enemyFreeze,1,ECUPD)
+alloc(enemyAnimSpeed,4,ECUPD)
+registersymbol(pEnemyController)
+registersymbol(enemyKlass)
+registersymbol(enemyFreeze)
+registersymbol(enemyAnimSpeed)
+label(return2)
+label(noAct)
+label(skipAnim)
+label(klassOk)
+
+newmem2:
+  mov [pEnemyController],rcx
+  cmp qword ptr [enemyKlass],00
+  jne klassOk
+  mov rax,[rcx]
+  mov [enemyKlass],rax
+klassOk:
+  cmp byte ptr [enemyFreeze],00
+  je noAct
+  mov byte ptr [rcx+000001C3],00
+  push rax
+  mov rax,[rcx+00000048]
+  test rax,rax
+  je skipAnim
+  movss xmm0,[enemyAnimSpeed]
+  movss [rax+00000048],xmm0
+  mov dword ptr [rax+0000005C],0
+  mov dword ptr [rax+00000060],0
+  mov dword ptr [rax+00000064],0
+skipAnim:
+  pop rax
+noAct:
+  mov [rsp+10],rbx
+  push rdi
+  sub rsp,80
+  jmp return2
+
+ECUPD:
+  jmp newmem2
+  nop 8
+return2:
+registersymbol(ECUPD)
+
+pEnemyController:
+  dq 0
+enemyKlass:
+  dq 0
+enemyFreeze:
+  db 01
+enemyAnimSpeed:
+  dd (float)0.0
+
+[DISABLE]
+ECUPD:
+  db 48 89 5C 24 10 57 48 81 EC 80 00 00 00
+{$lua}
+if syntaxcheck then return end
+local ka = getAddressSafe('enemyKlass')
+local kl = (ka ~= nil) and readQword(ka) or 0
+if kl ~= nil and kl ~= 0 then
+  local bytes = {}
+  local v = kl
+  for i = 1, 8 do bytes[i] = string.format('%02X', v % 256); v = math.floor(v / 256) end
+  local res = AOBScan(table.concat(bytes, ' '))
+  if res then
+    for i = 0, res.Count - 1 do
+      local a = tonumber(res.getString(i) or '', 16)
+      if a then
+        local mx = readFloat(a + 0x114)
+        local an = readQword(a + 0x48)
+        if mx ~= nil and an ~= nil and mx &gt; 0.5 and mx &lt; 1000000 and an &gt; 0x10000 then
+          writeFloat(an + 0x48, 1.0)
+          writeFloat(an + 0x5C, 1.0)
+          writeFloat(an + 0x60, 1.0)
+          writeBytes(a + 0x1C3, 1)
+        end
+      end
+    end
+    res.destroy()
+  end
+end
+{$asm}
+unregistersymbol(ECUPD)
+unregistersymbol(pEnemyController)
+unregistersymbol(enemyKlass)
+unregistersymbol(enemyFreeze)
+unregistersymbol(enemyAnimSpeed)
+dealloc(newmem2)
+dealloc(pEnemyController)
+dealloc(enemyKlass)
+dealloc(enemyFreeze)
+dealloc(enemyAnimSpeed)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>102</ID>
+      <Description>"[★3] 商店无限刷新（忽略刷新冷却）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(CRS,GameAssembly.dll,40 53 48 83 EC 20 80 B9 40 01 00 00 00 48 8B D9 74 08 32 C0 48 83 C4 20 5B C3)
+CRS:
+  mov al,1
+  ret
+  nop
+  nop
+  nop
+registersymbol(CRS)
+
+[DISABLE]
+CRS:
+  db 40 53 48 83 EC 20
+unregistersymbol(CRS)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>200</ID>
+      <Description>"[开关] 无限格挡（1 = 开，0 = 关）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>blockOn</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>201</ID>
+      <Description>"[数值] 动作速度倍率（默认 2.0 = 双倍；1.0 = 正常，1.5 = 1.5倍）"</Description>
+      <VariableType>Float</VariableType>
+      <Address>animSpeedMul</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>202</ID>
+      <Description>"[开关] 敌人定身（1 = 开，0 = 关）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>enemyFreeze</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>203</ID>
+      <Description>"[数值] 敌人动作速度（0 = 完全静止，0.3 = 慢动作，1.0 = 正常）"</Description>
+      <VariableType>Float</VariableType>
+      <Address>enemyAnimSpeed</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>204</ID>
+      <Description>"[指针] 玩家对象 pPlayerController"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>pPlayerController</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>205</ID>
+      <Description>"[指针] 敌人对象 pEnemyController"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>pEnemyController</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>900</ID>
+      <Description>"======== 以下为社区原作者条目（原样保留，未作改动） ========"</Description>
+      <VariableType>String</VariableType>
+      <Length>0</Length>
+      <Unicode>0</Unicode>
+      <CodePage>0</CodePage>
+      <ZeroTerminate>1</ZeroTerminate>
+      <Address/>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1000</ID>
+      <Description>"常规（勾选方框以展开选项）"</Description>
+      <Options moHideChildren="1"/>
+      <Color>FFFF00</Color>
+      <GroupHeader>1</GroupHeader>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>1001</ID>
+          <Description>"无限能量"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,89 9F D4 01 00 00 48 8B 0D ** ** ** ** 83 B9 E0 00 00 00 00) // should be unique
+alloc(newmem,$1000,INJECT)
+
+label(code)
+label(return)
+
+newmem:
+mov ebx,[rdi+000001D8]
+code:
+  mov [rdi+000001D4],ebx
+  jmp return
+
+INJECT:
+  jmp newmem
+  nop
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db 89 9F D4 01 00 00
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFD3C43061F
+
+7FFD3C4305FF: E8 BC 39 A7 FF        - call GameAssembly.il2cpp_get_exception_argument_null+320
+7FFD3C430604: C6 05 89 63 D7 03 01  - mov byte ptr [7FFD401A6994],01
+7FFD3C43060B: 85 DB                 - test ebx,ebx
+7FFD3C43060D: 78 0E                 - js 7FFD3C43061D
+7FFD3C43060F: 8B 87 D8 01 00 00     - mov eax,[rdi+000001D8]
+7FFD3C430615: 3B D8                 - cmp ebx,eax
+7FFD3C430617: 7E 06                 - jle 7FFD3C43061F
+7FFD3C430619: 8B D8                 - mov ebx,eax
+7FFD3C43061B: EB 02                 - jmp 7FFD3C43061F
+7FFD3C43061D: 33 DB                 - xor ebx,ebx
+// ---------- INJECTING HERE ----------
+7FFD3C43061F: 89 9F D4 01 00 00     - mov [rdi+000001D4],ebx
+// ---------- DONE INJECTING  ----------
+7FFD3C430625: 48 8B 0D 44 0C AE 03  - mov rcx,[7FFD3FF11270]
+7FFD3C43062C: 83 B9 E0 00 00 00 00  - cmp dword ptr [rcx+000000E0],00
+7FFD3C430633: 75 05                 - jne 7FFD3C43063A
+7FFD3C430635: E8 E6 3C A7 FF        - call GameAssembly.il2cpp_runtime_class_init
+7FFD3C43063A: 33 C9                 - xor ecx,ecx
+7FFD3C43063C: E8 BF 38 CE FF        - call GameUtil.get_Instance
+7FFD3C430641: 48 85 C0              - test rax,rax
+7FFD3C430644: 74 3C                 - je 7FFD3C430682
+7FFD3C430646: 80 B8 0C 01 00 00 00  - cmp byte ptr [rax+0000010C],00
+7FFD3C43064D: 74 0C                 - je 7FFD3C43065B
+}
+</AssemblerScript>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1002</ID>
+          <Description>"无限HP"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 41 0F 11 8E CC 01 00 00 45 33 C0 49 8B CE) // should be unique
+alloc(newmem,$1000,INJECT)
+label(code)
+label(return)
+
+newmem:
+movss xmm1,[r14+000001D0]
+code:
+
+  movss [r14+000001CC],xmm1
+  jmp return
+
+INJECT:
+  jmp newmem
+  nop 4
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 41 0F 11 8E CC 01 00 00
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFD3C424FB8
+
+7FFD3C424F93: F3 41 0F 10 86 D0 01 00 00  - movss xmm0,[r14+000001D0]
+7FFD3C424F9C: 41 0F 28 CB                 - movaps xmm1,xmm11
+7FFD3C424FA0: F3 0F 58 CE                 - addss xmm1,xmm6
+7FFD3C424FA4: 44 0F 2F E1                 - comiss xmm12,xmm1
+7FFD3C424FA8: 77 0A                       - ja 7FFD3C424FB4
+7FFD3C424FAA: 0F 2F C8                    - comiss xmm1,xmm0
+7FFD3C424FAD: 76 09                       - jna 7FFD3C424FB8
+7FFD3C424FAF: 0F 28 C8                    - movaps xmm1,xmm0
+7FFD3C424FB2: EB 04                       - jmp 7FFD3C424FB8
+7FFD3C424FB4: 41 0F 28 CC                 - movaps xmm1,xmm12
+// ---------- INJECTING HERE ----------
+7FFD3C424FB8: F3 41 0F 11 8E CC 01 00 00  - movss [r14+000001CC],xmm1
+// ---------- DONE INJECTING  ----------
+7FFD3C424FC1: 45 33 C0                    - xor r8d,r8d
+7FFD3C424FC4: 49 8B CE                    - mov rcx,r14
+7FFD3C424FC7: E8 C4 B6 00 00              - call PlayerController.SetCurrentHp
+7FFD3C424FCC: 45 0F 2F E3                 - comiss xmm12,xmm11
+7FFD3C424FD0: 76 39                       - jna 7FFD3C42500B
+7FFD3C424FD2: 41 0F 2F B6 CC 01 00 00     - comiss xmm6,[r14+000001CC]
+7FFD3C424FDA: 76 2F                       - jna 7FFD3C42500B
+7FFD3C424FDC: 48 8B 0D 8D C2 AE 03        - mov rcx,[7FFD3FF11270]
+7FFD3C424FE3: 83 B9 E0 00 00 00 00        - cmp dword ptr [rcx+000000E0],00
+7FFD3C424FEA: 75 05                       - jne 7FFD3C424FF1
+}
+</AssemblerScript>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1003</ID>
+          <Description>"末日币倍率"</Description>
+          <Options moHideChildren="1"/>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 0F 58 47 1C F3 0F 11 47 1C 83 78 3C 01) // should be unique
+alloc(newmem,$1000,INJECT)
+registersymbol(currency_multi)
+label(code)
+label(return)
+label(currency_multi)
+newmem:
+mulss xmm0, [currency_multi]
+code:
+  addss xmm0,[rdi+1C]
+  jmp return
+currency_multi:
+ dd (float)2.0
+INJECT:
+  jmp newmem
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 0F 58 47 1C
+
+unregistersymbol(INJECT)
+unregistersymbol(currency_multi)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFD3C0AF65E
+
+7FFD3C0AF637: 49 8B CE              - mov rcx,r14
+7FFD3C0AF63A: E8 91 C2 03 00        - call GameUtil.GetItemFromContainer
+7FFD3C0AF63F: 48 85 C0              - test rax,rax
+7FFD3C0AF642: 0F 84 0A 02 00 00     - je 7FFD3C0AF852
+7FFD3C0AF648: 44 39 78 38           - cmp [rax+38],r15d
+7FFD3C0AF64C: 75 C2                 - jne 7FFD3C0AF610
+7FFD3C0AF64E: 48 8B F7              - mov rsi,rdi
+7FFD3C0AF651: 48 89 7C 24 20        - mov [rsp+20],rdi
+7FFD3C0AF656: 66 41 0F 6E C4        - movd xmm0,r12d
+7FFD3C0AF65B: 0F 5B C0              - cvtdq2ps xmm0,xmm0
+// ---------- INJECTING HERE ----------
+7FFD3C0AF65E: F3 0F 58 47 1C        - addss xmm0,[rdi+1C]
+// ---------- DONE INJECTING  ----------
+7FFD3C0AF663: F3 0F 11 47 1C        - movss [rdi+1C],xmm0
+7FFD3C0AF668: 83 78 3C 01           - cmp dword ptr [rax+3C],01
+7FFD3C0AF66C: 75 2E                 - jne 7FFD3C0AF69C
+7FFD3C0AF66E: 48 8B 0D FB 1B E6 03  - mov rcx,[7FFD3FF11270]
+7FFD3C0AF675: 83 B9 E0 00 00 00 00  - cmp dword ptr [rcx+000000E0],00
+7FFD3C0AF67C: 75 05                 - jne 7FFD3C0AF683
+7FFD3C0AF67E: E8 9D 4C DF FF        - call GameAssembly.il2cpp_runtime_class_init
+7FFD3C0AF683: 33 C9                 - xor ecx,ecx
+7FFD3C0AF685: E8 B6 A6 05 00        - call GameUtil.SaveGame
+7FFD3C0AF68A: 90                    - nop 
+}
+</AssemblerScript>
+          <CheatEntries>
+            <CheatEntry>
+              <ID>1004</ID>
+              <Description>"倍率"</Description>
+              <ShowAsSigned>1</ShowAsSigned>
+              <VariableType>Float</VariableType>
+              <Address>currency_multi</Address>
+            </CheatEntry>
+          </CheatEntries>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1005</ID>
+          <Description>"消费末日币不减少"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 0F 11 47 1C 41 B6 01 44 88 B4 24 80 00 00 00) // should be unique
+alloc(newmem,$1000,INJECT)
+
+label(code)
+label(return)
+
+newmem:
+movss xmm0,[rdi+1C]
+code:
+  movss [rdi+1C],xmm0
+  jmp return
+
+INJECT:
+  jmp newmem
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 0F 11 47 1C
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFD3C10D13D
+
+7FFD3C10D116: 0F 84 F3 00 00 00        - je 7FFD3C10D20F
+7FFD3C10D11C: 8B 48 38                 - mov ecx,[rax+38]
+7FFD3C10D11F: 48 85 F6                 - test rsi,rsi
+7FFD3C10D122: 0F 84 E2 00 00 00        - je 7FFD3C10D20A
+7FFD3C10D128: 3B 4E 10                 - cmp ecx,[rsi+10]
+7FFD3C10D12B: 75 B3                    - jne 7FFD3C10D0E0
+7FFD3C10D12D: F3 0F 10 47 1C           - movss xmm0,[rdi+1C]
+7FFD3C10D132: 0F 2F 46 14              - comiss xmm0,[rsi+14]
+7FFD3C10D136: 72 A8                    - jb 7FFD3C10D0E0
+7FFD3C10D138: F3 0F 5C 46 14           - subss xmm0,[rsi+14]
+// ---------- INJECTING HERE ----------
+7FFD3C10D13D: F3 0F 11 47 1C           - movss [rdi+1C],xmm0
+// ---------- DONE INJECTING  ----------
+7FFD3C10D142: 41 B6 01                 - mov r14b,01
+7FFD3C10D145: 44 88 B4 24 80 00 00 00  - mov [rsp+00000080],r14b
+7FFD3C10D14D: 4C 8B 05 94 4C DD 03     - mov r8,[7FFD3FEE1DE8]
+7FFD3C10D154: 48 8B D7                 - mov rdx,rdi
+7FFD3C10D157: 48 8B 0D 3A F1 DF 03     - mov rcx,[7FFD3FF0C298]
+7FFD3C10D15E: E8 0D 6B D4 00           - call 7FFD3CE53C70
+7FFD3C10D163: 83 7E 10 02              - cmp dword ptr [rsi+10],02
+7FFD3C10D167: 0F 85 73 FF FF FF        - jne 7FFD3C10D0E0
+7FFD3C10D16D: 48 8B 0D 14 1E E0 03     - mov rcx,[7FFD3FF0EF88]
+7FFD3C10D174: 83 B9 E0 00 00 00 00     - cmp dword ptr [rcx+000000E0],00
+}
+</AssemblerScript>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1006</ID>
+          <Description>"消费奖杯不减少"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 0F 11 40 1C 4C 8B 05 ** ** ** ** 48 8B D0 48 8B 0D ** ** ** **) // should be unique
+alloc(newmem,$1000,INJECT)
+
+label(code)
+label(return)
+
+newmem:
+movss xmm0,[rax+1C]
+code:
+  movss [rax+1C],xmm0
+  jmp return
+
+INJECT:
+  jmp newmem
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 0F 11 40 1C
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFD3C10D427
+
+7FFD3C10D3FD: 48 85 FF              - test rdi,rdi
+7FFD3C10D400: 0F 84 FB 00 00 00     - je 7FFD3C10D501
+7FFD3C10D406: 45 33 C0              - xor r8d,r8d
+7FFD3C10D409: 8B 57 10              - mov edx,[rdi+10]
+7FFD3C10D40C: 49 8B CC              - mov rcx,r12
+7FFD3C10D40F: E8 DC E9 FD FF        - call GameUtil.GetItemSave
+7FFD3C10D414: 48 85 C0              - test rax,rax
+7FFD3C10D417: 0F 84 DF 00 00 00     - je 7FFD3C10D4FC
+7FFD3C10D41D: F3 0F 10 40 1C        - movss xmm0,[rax+1C]
+7FFD3C10D422: F3 0F 5C 47 14        - subss xmm0,[rdi+14]
+// ---------- INJECTING HERE ----------
+7FFD3C10D427: F3 0F 11 40 1C        - movss [rax+1C],xmm0
+// ---------- DONE INJECTING  ----------
+7FFD3C10D42C: 4C 8B 05 B5 49 DD 03  - mov r8,[7FFD3FEE1DE8]
+7FFD3C10D433: 48 8B D0              - mov rdx,rax
+7FFD3C10D436: 48 8B 0D 5B EE DF 03  - mov rcx,[7FFD3FF0C298]
+7FFD3C10D43D: E8 2E 68 D4 00        - call 7FFD3CE53C70
+7FFD3C10D442: 83 7F 10 02           - cmp dword ptr [rdi+10],02
+7FFD3C10D446: 75 9B                 - jne 7FFD3C10D3E3
+7FFD3C10D448: 33 D2                 - xor edx,edx
+7FFD3C10D44A: F3 0F 10 47 14        - movss xmm0,[rdi+14]
+7FFD3C10D44F: E8 3C E9 EB FF        - call 7FFD3BFCBD90
+7FFD3C10D454: 44 03 F0              - add r14d,eax
+}
+</AssemblerScript>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1007</ID>
+      <Description>"一击必杀（不可与“一击破甲”同时使用）"</Description>
+      <Color>0000FF</Color>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 0F 11 83 18 01 00 00 48 8B CB E8 ** ** ** ** 84 C0) // should be unique
+alloc(newmem,$1000,INJECT)
+
+label(code)
+label(return)
+
+newmem:
+movss xmm0, [instant_kill2]
+code:
+  movss [rbx+00000118],xmm0
+  jmp return
+
+instant_kill2:
+              dd (float)0.0
+
+INJECT:
+  jmp newmem
+  nop 3
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 0F 11 83 18 01 00 00
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFC8517FF30
+
+7FFC8517FF09: 45 33 C0                 - xor r8d,r8d
+7FFC8517FF0C: 8B D7                    - mov edx,edi
+7FFC8517FF0E: 48 8B CB                 - mov rcx,rbx
+7FFC8517FF11: E8 6A CF C2 FF           - call BossRushAntiCheat.VerifyHpDamage
+7FFC8517FF16: F3 0F 10 83 18 01 00 00  - movss xmm0,[rbx+00000118]
+7FFC8517FF1E: 66 0F 6E CF              - movd xmm1,edi
+7FFC8517FF22: 0F 5B C9                 - cvtdq2ps xmm1,xmm1
+7FFC8517FF25: F3 0F 5C C1              - subss xmm0,xmm1
+7FFC8517FF29: E8 D2 55 AF FF           - call 7FFC84C75500
+7FFC8517FF2E: 33 D2                    - xor edx,edx
+// ---------- INJECTING HERE ----------
+7FFC8517FF30: F3 0F 11 83 18 01 00 00  - movss [rbx+00000118],xmm0
+// ---------- DONE INJECTING  ----------
+7FFC8517FF38: 48 8B CB                 - mov rcx,rbx
+7FFC8517FF3B: E8 80 9C 00 00           - call EnemyController.IsBossOrLeader
+7FFC8517FF40: 84 C0                    - test al,al
+7FFC8517FF42: 75 09                    - jne 7FFC8517FF4D
+7FFC8517FF44: 48 8B 8B C8 00 00 00     - mov rcx,[rbx+000000C8]
+7FFC8517FF4B: EB 14                    - jmp 7FFC8517FF61
+7FFC8517FF4D: 33 C9                    - xor ecx,ecx
+7FFC8517FF4F: E8 EC B7 DC FF           - call UIController.get_Instance
+7FFC8517FF54: 48 85 C0                 - test rax,rax
+7FFC8517FF57: 0F 84 88 00 00 00        - je 7FFC8517FFE5
+}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1008</ID>
+      <Description>"一击破甲"</Description>
+      <Color>0000FF</Color>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,F3 0F 11 83 18 01 00 00 48 8B CB E8 ** ** ** ** 84 C0) // should be unique
+alloc(newmem,$1000,INJECT)
+
+label(code)
+label(return)
+
+newmem:
+code:
+  movss [rbx+00000118],xmm0
+  mov dword ptr [rbx+0000011C], 0
+  jmp return
+
+
+
+INJECT:
+  jmp newmem
+  nop 3
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db F3 0F 11 83 18 01 00 00
+
+unregistersymbol(INJECT)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFC8517FF30
+
+7FFC8517FF09: 45 33 C0                 - xor r8d,r8d
+7FFC8517FF0C: 8B D7                    - mov edx,edi
+7FFC8517FF0E: 48 8B CB                 - mov rcx,rbx
+7FFC8517FF11: E8 6A CF C2 FF           - call BossRushAntiCheat.VerifyHpDamage
+7FFC8517FF16: F3 0F 10 83 18 01 00 00  - movss xmm0,[rbx+00000118]
+7FFC8517FF1E: 66 0F 6E CF              - movd xmm1,edi
+7FFC8517FF22: 0F 5B C9                 - cvtdq2ps xmm1,xmm1
+7FFC8517FF25: F3 0F 5C C1              - subss xmm0,xmm1
+7FFC8517FF29: E8 D2 55 AF FF           - call 7FFC84C75500
+7FFC8517FF2E: 33 D2                    - xor edx,edx
+// ---------- INJECTING HERE ----------
+7FFC8517FF30: F3 0F 11 83 18 01 00 00  - movss [rbx+00000118],xmm0
+// ---------- DONE INJECTING  ----------
+7FFC8517FF38: 48 8B CB                 - mov rcx,rbx
+7FFC8517FF3B: E8 80 9C 00 00           - call EnemyController.IsBossOrLeader
+7FFC8517FF40: 84 C0                    - test al,al
+7FFC8517FF42: 75 09                    - jne 7FFC8517FF4D
+7FFC8517FF44: 48 8B 8B C8 00 00 00     - mov rcx,[rbx+000000C8]
+7FFC8517FF4B: EB 14                    - jmp 7FFC8517FF61
+7FFC8517FF4D: 33 C9                    - xor ecx,ecx
+7FFC8517FF4F: E8 EC B7 DC FF           - call UIController.get_Instance
+7FFC8517FF54: 48 85 C0                 - test rax,rax
+7FFC8517FF57: 0F 84 88 00 00 00        - je 7FFC8517FFE5
+}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1009</ID>
+      <Description>"装备等级不影响装备属性，因此冻结等级后可以无限提升属性。"</Description>
+      <Color>00FF80</Color>
+      <GroupHeader>1</GroupHeader>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>1010</ID>
+          <Description>"装备：强化时冻结等级（部分装备在特定等级有额外属性，冻结在该等级即可反复提升该属性）"</Description>
+          <Options moHideChildren="1"/>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+
+aobscanmodule(INJECT,GameAssembly.dll,41 FF 46 38 45 33 C0 F2 41 0F 10 4E 10) // should be unique
+alloc(newmem,$1000,INJECT)
+label(equip_set_level)
+registersymbol(equip_set_level)
+registersymbol(INJECT)
+label(code)
+label(return)
+
+newmem:
+
+code:
+  push ebx
+  mov ebx,[equip_set_level]
+  mov [r14+38],ebx
+  xor r8d,r8d
+  pop ebx
+  jmp return
+
+equip_set_level:
+               dd (int)1
+
+INJECT:
+  jmp newmem
+  nop 2
+return:
+
+
+[DISABLE]
+
+INJECT:
+  db 41 FF 46 38 45 33 C0 F2 41 0F 10 4E 10
+
+unregistersymbol(INJECT)
+unregistersymbol(equip_set_level)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: 7FFF7BF0548B
+
+7FFF7BF0545B: E8 60 EB DD FF        - call GameAssembly.il2cpp_get_exception_argument_null+320
+7FFF7BF05460: 48 8D 0D 71 AB E4 03  - lea rcx,[7FFF7FD4FFD8]
+7FFF7BF05467: E8 54 EB DD FF        - call GameAssembly.il2cpp_get_exception_argument_null+320
+7FFF7BF0546C: C6 05 21 0B 0E 04 01  - mov byte ptr [7FFF7FFE5F94],01
+7FFF7BF05473: 0F 57 C0              - xorps xmm0,xmm0
+7FFF7BF05476: 33 C0                 - xor eax,eax
+7FFF7BF05478: 0F 11 44 24 60        - movups [rsp+60],xmm0
+7FFF7BF0547D: 48 89 44 24 70        - mov [rsp+70],rax
+7FFF7BF05482: 4D 85 F6              - test r14,r14
+7FFF7BF05485: 0F 84 4A 04 00 00     - je 7FFF7BF058D5
+// ---------- INJECTING HERE ----------
+7FFF7BF0548B: 41 FF 46 38           - inc [r14+38]
+// ---------- DONE INJECTING  ----------
+7FFF7BF0548F: 45 33 C0              - xor r8d,r8d
+7FFF7BF05492: F2 41 0F 10 4E 10     - movsd xmm1,[r14+10]
+7FFF7BF05498: 49 8B CF              - mov rcx,r15
+7FFF7BF0549B: E8 A0 26 02 00        - call GameUtil.GetEquipSetting
+7FFF7BF054A0: 48 89 44 24 38        - mov [rsp+38],rax
+7FFF7BF054A5: 49 8B 4E 28           - mov rcx,[r14+28]
+7FFF7BF054A9: 48 85 C9              - test rcx,rcx
+7FFF7BF054AC: 0F 84 23 04 00 00     - je 7FFF7BF058D5
+7FFF7BF054B2: 4C 8B 05 4F 9B E3 03  - mov r8,[7FFF7FD3F008]
+7FFF7BF054B9: 33 D2                 - xor edx,edx
+}
+</AssemblerScript>
+          <CheatEntries>
+            <CheatEntry>
+              <ID>1011</ID>
+              <Description>"设置等级"</Description>
+              <ShowAsSigned>1</ShowAsSigned>
+              <VariableType>4 Bytes</VariableType>
+              <Address>equip_set_level</Address>
+            </CheatEntry>
+          </CheatEntries>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1012</ID>
+      <Description>"玩家数据（PlayerController）"</Description>
+      <Options moHideChildren="1"/>
+      <Color>00FFFF</Color>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+
+aobscanfunction(INJECT,PlayerController.Update,48 89 5C 24 08 57 48 83 EC 40 80 3D ** ** ** ** 00)  // should be unique in this function
+alloc(newmem,$1000,INJECT)
+alloc(pPlayerController,8)
+registersymbol(pPlayerController)
+label(code)
+label(return)
+
+
+
+newmem:
+
+code:
+  mov [pPlayerController], rcx
+
+
+  mov [rsp+08],rbx
+  jmp return
+
+INJECT:
+  jmp newmem
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db 48 89 5C 24 08
+
+unregistersymbol(INJECT)
+unregistersymbol(pPlayerController)
+dealloc(pPlayerController)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: PlayerController.Update
+
+7FFB98608CA2: 5F                    - pop rdi
+7FFB98608CA3: C3                    - ret 
+7FFB98608CA4: E8 C7 B5 A6 FF        - call GameAssembly.il2cpp_method_get_class+A0
+7FFB98608CA9: CC                    - int 3 
+7FFB98608CAA: CC                    - int 3 
+7FFB98608CAB: CC                    - int 3 
+7FFB98608CAC: CC                    - int 3 
+7FFB98608CAD: CC                    - int 3 
+7FFB98608CAE: CC                    - int 3 
+7FFB98608CAF: CC                    - int 3 
+// ---------- INJECTING HERE ----------
+PlayerController.Update: 48 89 5C 24 08        - mov [rsp+08],rbx
+// ---------- DONE INJECTING  ----------
+7FFB98608CB5: 57                    - push rdi
+7FFB98608CB6: 48 83 EC 40           - sub rsp,40
+7FFB98608CBA: 80 3D AC EC D6 03 00  - cmp byte ptr [7FFB9C37796D],00
+7FFB98608CC1: 48 8B D9              - mov rbx,rcx
+7FFB98608CC4: 75 13                 - jne 7FFB98608CD9
+7FFB98608CC6: 48 8D 0D 33 A9 B3 03  - lea rcx,[7FFB9C143600]
+7FFB98608CCD: E8 EE B2 A6 FF        - call GameAssembly.il2cpp_get_exception_argument_null+320
+7FFB98608CD2: C6 05 94 EC D6 03 01  - mov byte ptr [7FFB9C37796D],01
+7FFB98608CD9: 48 8B 0D 20 A9 B3 03  - mov rcx,[7FFB9C143600]
+7FFB98608CE0: 48 8B BB 98 00 00 00  - mov rdi,[rbx+00000098]
+}
+</AssemblerScript>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>1013</ID>
+          <Description>"当前能量"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>4 Bytes</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>1D4</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1014</ID>
+          <Description>"最大能量"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>4 Bytes</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>1D8</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1015</ID>
+          <Description>"当前HP"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>1CC</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1016</ID>
+          <Description>"最大HP"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>1D0</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1017</ID>
+          <Description>"动作速度"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>50</Offset>
+            <Offset>78</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1018</ID>
+          <Description>"自动弹反（1 = 开启并冻结该值，0 = 关闭）"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Byte</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>1A4</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1019</ID>
+          <Description>"冲刺/弹反连按无延迟（1 = 开启并冻结该值，0 = 关闭）"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Byte</VariableType>
+          <Address>pPlayerController</Address>
+          <Offsets>
+            <Offset>C8</Offset>
+          </Offsets>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1020</ID>
+      <Description>"敌人数据（EnemyController，仅适用于Boss等单个敌人）"</Description>
+      <Options moHideChildren="1"/>
+      <Color>8080FF</Color>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+
+aobscanfunction(INJECT,EnemyController.Update,48 89 5C 24 10 57 48 81 EC 80 00 00 00)  // should be unique in this function
+alloc(newmem,$1000,INJECT)
+alloc(pEnemyController,8)
+registersymbol(pEnemyController)
+label(code)
+label(return)
+
+newmem:
+
+code:
+  mov [pEnemyController], rcx
+
+
+  mov [rsp+10],rbx
+  jmp return
+
+INJECT:
+  jmp newmem
+return:
+registersymbol(INJECT)
+
+[DISABLE]
+
+INJECT:
+  db 48 89 5C 24 10
+
+unregistersymbol(INJECT)
+unregistersymbol(pEnemyController)
+dealloc(pEnemyController)
+dealloc(newmem)
+
+{
+// ORIGINAL CODE - INJECTION POINT: EnemyController.Update
+
+7FFB9B484066: CC                    - int 3 
+7FFB9B484067: CC                    - int 3 
+7FFB9B484068: CC                    - int 3 
+7FFB9B484069: CC                    - int 3 
+7FFB9B48406A: CC                    - int 3 
+7FFB9B48406B: CC                    - int 3 
+7FFB9B48406C: CC                    - int 3 
+7FFB9B48406D: CC                    - int 3 
+7FFB9B48406E: CC                    - int 3 
+7FFB9B48406F: CC                    - int 3 
+// ---------- INJECTING HERE ----------
+EnemyController.Update: 48 89 5C 24 10        - mov [rsp+10],rbx
+// ---------- DONE INJECTING  ----------
+7FFB9B484075: 57                    - push rdi
+7FFB9B484076: 48 81 EC 80 00 00 00  - sub rsp,00000080
+7FFB9B48407D: 80 3D AB 3B D2 03 00  - cmp byte ptr [7FFB9F1A7C2F],00
+7FFB9B484084: 48 8B D9              - mov rbx,rcx
+7FFB9B484087: 75 13                 - jne 7FFB9B48409C
+7FFB9B484089: 48 8D 0D 98 F5 AE 03  - lea rcx,[7FFB9EF73628]
+7FFB9B484090: E8 DB FF A1 FF        - call GameAssembly.il2cpp_get_exception_argument_null+320
+7FFB9B484095: C6 05 93 3B D2 03 01  - mov byte ptr [7FFB9F1A7C2F],01
+7FFB9B48409C: 48 8B 0D 85 F5 AE 03  - mov rcx,[7FFB9EF73628]
+7FFB9B4840A3: 48 8B 7B 38           - mov rdi,[rbx+38]
+}
+</AssemblerScript>
+      <CheatEntries>
+        <CheatEntry>
+          <ID>1021</ID>
+          <Description>"敌人当前HP（每次只影响一个敌人，建议改用一击必杀）"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>118</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1022</ID>
+          <Description>"敌人最大HP"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>114</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1023</ID>
+          <Description>"敌人当前护盾值（每次只影响一个敌人）"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>4 Bytes</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>11c</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1024</ID>
+          <Description>"攻击间隔"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>B0</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1025</ID>
+          <Description>"攻击计时"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>C0</Offset>
+          </Offsets>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>1026</ID>
+          <Description>"敌人动作速度"</Description>
+          <ShowAsSigned>1</ShowAsSigned>
+          <VariableType>Float</VariableType>
+          <Address>pEnemyController</Address>
+          <Offsets>
+            <Offset>48</Offset>
+            <Offset>48</Offset>
+          </Offsets>
+        </CheatEntry>
+      </CheatEntries>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols/>
+</CheatTable>

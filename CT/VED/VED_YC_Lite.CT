@@ -1,0 +1,298 @@
+<?xml version='1.0' encoding='utf-8'?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"======== VED 辅助 CT（YC 版） v1.0.2 ========"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>2</ID>
+      <Description>"【游戏版本】VED 0.0.1865（buildID 1880 / client_version 0.0.1865_7e178fd）—— 仅适用于此版本"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>3</ID>
+      <Description>"【CT版本】v1.0.2    【制作日期】2026-10-01    【作者】YC"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>4</ID>
+      <Description>"【环境要求】Cheat Engine 7.5 或更新版本；运行时不需要 Mono/IL2CPP 功能，任何电脑均可使用"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>5</ID>
+      <Description>"【用法】1.用CE附加到 ved.exe  2.勾选 [★1][★2][★3]  3.数值条目双击改值，可勾选冻结"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>6</ID>
+      <Description>"【原理】全部使用 AOB 特征码定位 + 代码注入，不含任何硬编码地址；取消勾选会自动还原原始字节"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>7</ID>
+      <Description>"【兼容性】仅限上述游戏版本；游戏更新后特征码可能失效，需要重新定位。不同电脑同一版本通用"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>8</ID>
+      <Description>"【注意】本表会注册 pPlayerController / pEnemyController 符号，与其它CT冲突时请二选一"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>9</ID>
+      <Description>"【致谢】数据结构与思路参考社区作者公开的CT，感谢社区作者的探索与分享"</Description>
+      <VariableType>String</VariableType>
+      <Address />
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>100</ID>
+      <Description>"[★1] 无限格挡 / 自动弹反（无CD，代码级）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(PCUPD,GameAssembly.dll,48 89 5C 24 08 57 48 83 EC 40 80 3D ?? ?? ?? ?? 00 48 8B D9 75 ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 48 8B BB 98 00 00 00 83 B9 E0 00 00 00 00)
+alloc(newmem,$1000,PCUPD)
+alloc(pPlayerController,8,PCUPD)
+alloc(blockOn,1,PCUPD)
+alloc(animSpeedMul,4,PCUPD)
+registersymbol(pPlayerController)
+registersymbol(blockOn)
+registersymbol(animSpeedMul)
+label(code)
+label(return)
+label(skipBlock)
+label(skipAnim)
+
+newmem:
+  mov [pPlayerController],rcx
+  push rax
+  cmp byte ptr [blockOn],00
+  je skipBlock
+  mov byte ptr [rcx+000001A4],01
+skipBlock:
+  mov rax,[rcx+00000078]
+  test rax,rax
+  je skipAnim
+  movss xmm0,[animSpeedMul]
+  movss [rax+00000050],xmm0
+skipAnim:
+  pop rax
+code:
+  mov [rsp+08],rbx
+  push rdi
+  sub rsp,40
+  jmp return
+
+PCUPD:
+  jmp newmem
+  nop 5
+return:
+registersymbol(PCUPD)
+
+pPlayerController:
+  dq 0
+blockOn:
+  db 01
+animSpeedMul:
+  dd (float)2.0
+
+[DISABLE]
+PCUPD:
+  db 48 89 5C 24 08 57 48 83 EC 40
+unregistersymbol(PCUPD)
+unregistersymbol(pPlayerController)
+unregistersymbol(blockOn)
+unregistersymbol(animSpeedMul)
+dealloc(newmem)
+dealloc(pPlayerController)
+dealloc(blockOn)
+dealloc(animSpeedMul)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>101</ID>
+      <Description>"[★2] 敌人定身 / 不再攻击（对所有敌人生效；取消勾选会自动恢复）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(ECUPD,GameAssembly.dll,48 89 5C 24 10 57 48 81 EC 80 00 00 00 80 3D ?? ?? ?? ?? 00 48 8B D9 75 ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 48 8B 7B 38 83 B9 E0 00 00 00 00)
+alloc(newmem2,$1000,ECUPD)
+alloc(pEnemyController,8,ECUPD)
+alloc(enemyKlass,8,ECUPD)
+alloc(enemyFreeze,1,ECUPD)
+alloc(enemyAnimSpeed,4,ECUPD)
+registersymbol(pEnemyController)
+registersymbol(enemyKlass)
+registersymbol(enemyFreeze)
+registersymbol(enemyAnimSpeed)
+label(return2)
+label(noAct)
+label(skipAnim)
+label(klassOk)
+
+newmem2:
+  mov [pEnemyController],rcx
+  cmp qword ptr [enemyKlass],00
+  jne klassOk
+  mov rax,[rcx]
+  mov [enemyKlass],rax
+klassOk:
+  cmp byte ptr [enemyFreeze],00
+  je noAct
+  mov byte ptr [rcx+000001C3],00
+  push rax
+  mov rax,[rcx+00000048]
+  test rax,rax
+  je skipAnim
+  movss xmm0,[enemyAnimSpeed]
+  movss [rax+00000048],xmm0
+  mov dword ptr [rax+0000005C],0
+  mov dword ptr [rax+00000060],0
+  mov dword ptr [rax+00000064],0
+skipAnim:
+  pop rax
+noAct:
+  mov [rsp+10],rbx
+  push rdi
+  sub rsp,80
+  jmp return2
+
+ECUPD:
+  jmp newmem2
+  nop 8
+return2:
+registersymbol(ECUPD)
+
+pEnemyController:
+  dq 0
+enemyKlass:
+  dq 0
+enemyFreeze:
+  db 01
+enemyAnimSpeed:
+  dd (float)0.0
+
+[DISABLE]
+ECUPD:
+  db 48 89 5C 24 10 57 48 81 EC 80 00 00 00
+{$lua}
+if syntaxcheck then return end
+local ka = getAddressSafe('enemyKlass')
+local kl = (ka ~= nil) and readQword(ka) or 0
+if kl ~= nil and kl ~= 0 then
+  local bytes = {}
+  local v = kl
+  for i = 1, 8 do bytes[i] = string.format('%02X', v % 256); v = math.floor(v / 256) end
+  local res = AOBScan(table.concat(bytes, ' '))
+  if res then
+    for i = 0, res.Count - 1 do
+      local a = tonumber(res.getString(i) or '', 16)
+      if a then
+        local mx = readFloat(a + 0x114)
+        local an = readQword(a + 0x48)
+        if mx ~= nil and an ~= nil and mx &gt; 0.5 and mx &lt; 1000000 and an &gt; 0x10000 then
+          writeFloat(an + 0x48, 1.0)
+          writeFloat(an + 0x5C, 1.0)
+          writeFloat(an + 0x60, 1.0)
+          writeBytes(a + 0x1C3, 1)
+        end
+      end
+    end
+    res.destroy()
+  end
+end
+{$asm}
+unregistersymbol(ECUPD)
+unregistersymbol(pEnemyController)
+unregistersymbol(enemyKlass)
+unregistersymbol(enemyFreeze)
+unregistersymbol(enemyAnimSpeed)
+dealloc(newmem2)
+dealloc(pEnemyController)
+dealloc(enemyKlass)
+dealloc(enemyFreeze)
+dealloc(enemyAnimSpeed)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>102</ID>
+      <Description>"[★3] 商店无限刷新（忽略刷新冷却）  — YC"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+aobscanmodule(CRS,GameAssembly.dll,40 53 48 83 EC 20 80 B9 40 01 00 00 00 48 8B D9 74 08 32 C0 48 83 C4 20 5B C3)
+CRS:
+  mov al,1
+  ret
+  nop
+  nop
+  nop
+registersymbol(CRS)
+
+[DISABLE]
+CRS:
+  db 40 53 48 83 EC 20
+unregistersymbol(CRS)
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>200</ID>
+      <Description>"[开关] 无限格挡（1 = 开，0 = 关）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>blockOn</Address>
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>201</ID>
+      <Description>"[数值] 动作速度倍率（默认 2.0 = 双倍；1.0 = 正常，1.5 = 1.5倍）"</Description>
+      <VariableType>Float</VariableType>
+      <Address>animSpeedMul</Address>
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>202</ID>
+      <Description>"[开关] 敌人定身（1 = 开，0 = 关）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>enemyFreeze</Address>
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>203</ID>
+      <Description>"[数值] 敌人动作速度（0 = 完全静止，0.3 = 慢动作，1.0 = 正常）"</Description>
+      <VariableType>Float</VariableType>
+      <Address>enemyAnimSpeed</Address>
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>204</ID>
+      <Description>"[指针] 玩家对象 pPlayerController"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>pPlayerController</Address>
+      <Offsets />
+    </CheatEntry>
+    <CheatEntry>
+      <ID>205</ID>
+      <Description>"[指针] 敌人对象 pEnemyController"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>pEnemyController</Address>
+      <Offsets />
+    </CheatEntry>
+  </CheatEntries>
+</CheatTable>

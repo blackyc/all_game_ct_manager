@@ -1,0 +1,58 @@
+[ENABLE]
+aobscanmodule(PCUPD,GameAssembly.dll,48 89 5C 24 08 57 48 83 EC 40 80 3D ?? ?? ?? ?? 00 48 8B D9 75 ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? C6 05 ?? ?? ?? ?? 01 48 8B 0D ?? ?? ?? ?? 48 8B BB 98 00 00 00 83 B9 E0 00 00 00 00)
+alloc(newmem,$1000,PCUPD)
+alloc(pPlayerController,8,PCUPD)
+alloc(blockOn,1,PCUPD)
+alloc(animSpeedMul,4,PCUPD)
+registersymbol(pPlayerController)
+registersymbol(blockOn)
+registersymbol(animSpeedMul)
+label(code)
+label(return)
+label(skipBlock)
+label(skipAnim)
+
+newmem:
+  mov [pPlayerController],rcx
+  push rax
+  cmp byte ptr [blockOn],00
+  je skipBlock
+  mov byte ptr [rcx+000001A4],01
+skipBlock:
+  mov rax,[rcx+00000078]
+  test rax,rax
+  je skipAnim
+  movss xmm0,[animSpeedMul]
+  movss [rax+00000050],xmm0
+skipAnim:
+  pop rax
+code:
+  mov [rsp+08],rbx
+  push rdi
+  sub rsp,40
+  jmp return
+
+PCUPD:
+  jmp newmem
+  nop 5
+return:
+registersymbol(PCUPD)
+
+pPlayerController:
+  dq 0
+blockOn:
+  db 01
+animSpeedMul:
+  dd (float)2.0
+
+[DISABLE]
+PCUPD:
+  db 48 89 5C 24 08 57 48 83 EC 40
+unregistersymbol(PCUPD)
+unregistersymbol(pPlayerController)
+unregistersymbol(blockOn)
+unregistersymbol(animSpeedMul)
+dealloc(newmem)
+dealloc(pPlayerController)
+dealloc(blockOn)
+dealloc(animSpeedMul)
