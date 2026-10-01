@@ -8,10 +8,6 @@
 |---|---|---|---|---|
 | `files/VED_YC_CheatTable.CT` | Cheat Table | VED | 0.0.1865 | 完整版:无限格挡 / 敌人定身 / 商店无限刷新 / 动作速度倍率 |
 | `files/VED_YC_Lite.CT` | Cheat Table | VED | 0.0.1865 | 精简版:仅上述新增功能 |
-| `files/autoblock_player_update.aa` | 脚本 | VED | 0.0.1865 | 无限格挡(自动弹反)+ 动作速度倍率 |
-| `files/enemy_freeze.aa` | 脚本 | VED | 0.0.1865 | 敌人定身 / 不再攻击 |
-| `files/shop_free_refresh.aa` | 脚本 | VED | 0.0.1865 | 商店无限刷新 |
-| `files/ce_bridge_cli.py` | 程序 | 通用 | — | Cheat Engine MCP 桥命令行工具 |
 
 ## 使用
 
