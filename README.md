@@ -4,10 +4,10 @@
 
 ## 文件索引
 
-| 游戏 | 文件名 | 发布平台 | 感谢 |
-|---|---|---|---|
-| VED(0.0.1865) | VED_YC_CheatTable.CT | Game Cheats Manager | 社区作者 **ELYSIUM** |
-| VED(0.0.1865) | VED_YC_Lite.CT | Game Cheats Manager | 社区作者 **ELYSIUM** |
+| 游戏 | 版本 | 文件名 | 说明 | 发布平台 | 感谢 |
+|---|---|---|---|---|---|
+| VED | 0.0.1865 | VED_YC_CheatTable.CT | 完整版:无限格挡 / 敌人定身 / 商店无限刷新 / 动作速度倍率 | Game Cheats Manager | 社区作者 **ELYSIUM** |
+| VED | 0.0.1865 | VED_YC_Lite.CT | 精简版:仅上述新增功能 | Game Cheats Manager | 社区作者 **ELYSIUM** |
 
 ## 社区贡献与来源
 
