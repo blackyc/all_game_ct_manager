@@ -1,0 +1,1114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>145</ID>
+      <Description>"[★0] 启动/重新定位（勾选即生效）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+-- =============================================================================
+--  ForgeTax / FORGETAX —— 敲击结果控制 + 剑数据查看
+--  作者：YC          版本：v3.2.0          日期：2026-10-11
+--  适用：ForgeTax.exe（Unity **Mono** 运行时）      Cheat Engine 7.5 或更新
+-- =============================================================================
+--  【功能一览】
+--   [★1] 强制大成功（1=开）      让每一次敲击的结果固定为「大成功」
+--                                ⇒ 剑永远不会被破坏，价值只增不减
+--   [★2] 强制结果值             想固定成别的结果就改这里
+--                                1=损坏  2=维持  3=成功  4=大成功（默认 4）
+--   [★3] 同步界面概率显示（1=开） 界面上那 5 个概率也显示成 100% 大成功（纯显示）
+--   [1]  剑·价值                 剑当前价值；**能读到数字 = 脚本已就绪**
+--   [1]  剑·等级 / 敲击次数 / 上次结果 / 已损坏    当前剑的状态
+--   [备] 界面概率 · 破坏/损坏/维持/成功/大成功     界面上显示的 5 个概率（千分比）
+--   [备] 本期订单额 / 已完成交付                  本局订单进度
+--
+--  【使用方法】
+--   1) Cheat Engine → Open Process → 附加到 ForgeTax.exe
+--   2) CE 菜单 Mono → Activate Mono Features
+--      （首次启用可能要联网下载组件；脚本也会自动尝试激活）
+--   3) Ctrl+Alt+L 打开 Lua 引擎 → 执行本文件
+--      （也可用 dofile([[本文件绝对路径]]) 执行）
+--      日志出现 "ForgeTax SwordTool v" .. 版本号 .. " ready" 即成功
+--   4) 脚本首次运行会**自动把 [★1] 打开**（不想自动开就把它改回 0）
+--      [★2] 强制结果值 保持 4 即可
+--   5) 每次重开游戏 / 读档后：CE 重新 Open Process 附加新的游戏进程 → 再执行一次本脚本
+--      （开关值是存在游戏内存里的，重开游戏后由脚本重新设为默认；脚本会自动清理
+--        上一次留下的旧符号，不会串到旧进程的地址）
+--
+--   关闭：把 [★1] 改回 0，脚本会自动把原始字节还原（不留痕迹）
+--         想彻底退出，Lua 引擎里执行  StopForgeTaxTool()
+--
+--  【工作原理】
+--   敲击结果由 ForgeChances.Roll(int ticket) 决定，它按 5 个权重（合计 1000）
+--   累加找到落点并返回结果枚举：0破坏 1损坏 2维持 3成功 4大成功。
+--   本脚本在它的**入口**写 6 字节补丁：  B8 &lt;结果&gt; 00 00 00 C3   (mov eax,值; ret)
+--   调用方 call 时已压入返回地址，这里直接 mov/ret 返回，栈平衡、不动任何寄存器。
+--   因为 Roll 是敲击结算的最后一环，无论概率怎么算出来的，都必须过它 —— 所以必生效。
+--   （数据侧改概率表是**不可靠**的：游戏有两套取概率分支，且概率表会被运行时改写。）
+--
+--   为什么不需要写死地址：本作是 Mono 运行时，对象都在 GC 托管堆上，且没有任何静态
+--   字段指向这些对象，"模块基址+偏移"在这里不成立。脚本改为运行时按「类名+字段偏移」
+--   解析：mono_findClass → 枚举实例 → mono_class_findMethod → mono_compile_method
+--   取 JIT 原生地址。换电脑、换存档、重开游戏都能重新定位，只有游戏版本更新导致
+--   字段偏移变化时才需要改下面 CFG 里的偏移。
+--
+--  【偏移速查（本版本已验证）】
+--   GPT6ForgeRoom                 +0x148 ForgeEnhancementBalance
+--                                 +0x150 ForgeAnvilDisplay      ← 界面显示
+--                                 +0x218 GPT6Sword &lt;OnAnvil&gt;    ← 砧上那把剑
+--                                 +0x2B0 Double 订单额   +0x2B8 Double 已完成
+--   GPT6Sword                     +0x078 Double value   +0x080 Int32 grade
+--                                 +0x060 Int32 敲击次数  +0x084 Int32 上次结果
+--                                 +0x091 Boolean 已损坏
+--   ForgeEnhancementBalance       +0x018 rows 数组  +0x02C maxGrade
+--                                 数组: 长度+0x18, 数据+0x20, 每行 24 字节
+--                                 行: grade | 破坏 | 损坏 | 维持 | 成功 | 大成功（% 合计100）
+--   ForgeAnvilDisplay             +0x110 Double shownValue（界面显示的价值）
+--                                 +0x144 Int32×5 界面概率（千分比，合计 1000）
+--   ForgeChances.Roll(int)        返回值 = 敲击结果（本脚本打补丁的目标）
+--
+--  【注意事项】
+--   · 切换 [★1] 时不要正好点在敲击的那一帧（避免指令撕裂）；脚本 250ms 内完成补丁
+--   · 只改内存里 6 字节代码 + 自己分配的一小块内存，不修改游戏文件，不联网
+--   · 建议离线 / 单机使用
+--   · 备份：原始 6 字节会自动存到自己分配的内存里（符号 fxo_roll_bak），
+--           关掉 [★1] 即刻还原；重开游戏后所有改动自然消失
+--   · **取消勾选 / 关开关一定能还原**（v3.0.4 修复：曾经因为"补丁已在位"的早期返回
+--     没有标记状态，导致取消勾选时被判断成"无需还原"而跳过）。现在停止时**直接按
+--     实际字节判断**，不看状态标志；原始字节有"内存 + CE 全局 + 内置序言"三层备份
+--     （v3.0.3 修复：旧版重跑脚本时会连备份符号一起注销，导致补丁在、备份没了、
+--      取消勾选也无法还原）
+--   · **游戏重启/退出时脚本会自动停止**：定时器发现目标进程变化或连续 3 次找不到
+--     游戏对象，会立刻销毁定时器、注销符号并提示重新执行，不会反复尝试解析
+--     （v3.0.1 修复：旧版在游戏重开后每 250ms 重试一次 Mono 扫描，会导致 CE 卡死、
+--      并反复注入 mono 数据收集器 DLL）
+-- =============================================================================
+
+local VERSION = "3.2.0"
+local AUTHOR  = "YC"
+
+-- ========================== 配置区（游戏更新只改这里） ==========================
+local CFG = {
+    roomClass = "GPT6ForgeRoom",
+    -- 脚本启动时是否自动激活 CE 的 Mono 功能（会往游戏进程注入 CE 的 mono 数据收集器）。
+    -- 想自己用 CE 菜单手动激活、不让脚本碰注入，就改成 false（改完重新执行一次脚本）。
+    autoActivateMono = true,
+    off = {
+        room_balance   = 0x148,
+        room_display   = 0x150,
+        room_held      = 0x210,
+        room_onAnvil   = 0x218,
+        room_target    = 0x238,
+        room_quota     = 0x2B0,
+        room_delivered = 0x2B8,
+
+        bal_rows     = 0x018,
+        bal_maxGrade = 0x02C,
+
+        arr_len  = 0x018,
+        arr_data = 0x020,
+
+        row_break   = 0x04,
+        row_damage  = 0x08,
+        row_hold    = 0x0C,
+        row_success = 0x10,
+        row_great   = 0x14,
+
+        sword_strikes = 0x060,
+        sword_value   = 0x078,
+        sword_grade   = 0x080,
+        sword_outcome = 0x084,
+        sword_broken  = 0x091,
+
+        disp_shownValue = 0x110,
+        disp_chances    = 0x144,
+    },
+}
+
+-- ====================== 运行期偏移表（按字段名/类型解析） ======================
+-- 游戏更新常常只是字段偏移变了、名字不变。所以这里**不写死偏移**：
+-- 先用 Mono 类元数据按「字段名 / 字段类型」查出真实偏移，查不到才退回下面的默认值。
+-- 这样别人换了游戏版本也能自己找到字段，不会卡在"实例校验不通过"。
+local OFF = {}
+
+local function findField(cls, pred)
+    if not cls or cls == 0 then return nil end
+    local fs = mono_class_enumFields(cls, false) or {}
+    for i = 1, #fs do
+        local f = fs[i]
+        if pred(tostring(f.name), tostring(f.typename), f.offset or 0) then return f.offset end
+    end
+    return nil
+end
+
+local function resolveOffsets()
+    local function clsOf(n)
+        local c = mono_findClass("", n)
+        if not c or c == 0 then return nil end
+        return c
+    end
+
+    -- GPT6ForgeRoom：按"字段类型"找（名字里带 &lt; &gt; 的后备字段名也一并匹配）
+    local room = clsOf("GPT6ForgeRoom")
+    if room then
+        OFF.room_balance = findField(room, function(_, t) return t == "ForgeEnhancementBalance" end)
+        OFF.room_display = findField(room, function(_, t) return t == "ForgeAnvilDisplay" end)
+        OFF.room_onAnvil = findField(room, function(n, t)
+            return t == "GPT6Sword" and n:find("OnAnvil", 1, true) ~= nil end)
+        OFF.room_held    = findField(room, function(n, t)
+            return t == "GPT6Sword" and n:find("Held", 1, true) ~= nil end)
+        OFF.room_target  = findField(room, function(n, t)
+            return t == "GPT6Sword" and n:find("targetSword", 1, true) ~= nil end)
+        OFF.room_quota     = findField(room, function(n) return n == "quota" end)
+        OFF.room_delivered = findField(room, function(n) return n == "delivered" end)
+    end
+
+    local bal = clsOf("ForgeEnhancementBalance")
+    if bal then
+        OFF.bal_rows     = findField(bal, function(n) return n == "rows" end)
+        OFF.bal_maxGrade = findField(bal, function(n) return n == "maxGrade" end)
+    end
+
+    local disp = clsOf("ForgeAnvilDisplay")
+    if disp then
+        OFF.disp_shownValue = findField(disp, function(n) return n == "shownValue" end)
+        OFF.disp_chances    = findField(disp, function(_, t) return t == "ForgeChances" end)
+    end
+
+    local sw = clsOf("GPT6Sword")
+    if sw then
+        OFF.sword_strikes = findField(sw, function(n) return n == "strikes" end)
+        OFF.sword_value   = findField(sw, function(n) return n == "value" end)
+        OFF.sword_grade   = findField(sw, function(n) return n == "grade" end)
+        OFF.sword_outcome = findField(sw, function(n) return n == "lastOutcome" end)
+        OFF.sword_broken  = findField(sw, function(n) return n == "broken" end)
+    end
+
+    -- 结构性偏移（MonoArray 长度/数据位置、ForgeChanceRow 行内布局）以及查不到的项：用默认值
+    for k, v in pairs(CFG.off) do
+        if OFF[k] == nil then OFF[k] = v end
+    end
+    return OFF
+end
+
+-- 敲击结果函数入口补丁： mov eax,&lt;结果&gt; ; ret   =  B8 &lt;结果&gt; 00 00 00 C3
+local ROLL_CLASS, ROLL_METHOD = "ForgeChances", "Roll"
+local ROLL_PATCH_LEN = 6
+local function rollPatchBytes(v) return { 0xB8, v, 0x00, 0x00, 0x00, 0xC3 } end
+
+FXO_EVENTS = FXO_EVENTS or {}   -- 事件日志（诊断用，最多保留 80 条）
+local function ev(tag)
+    FXO_EVENTS[#FXO_EVENTS + 1] = string.format("%dms %s", math.floor((os.clock() % 100000) * 1000), tostring(tag))
+    if #FXO_EVENTS &gt; 80 then table.remove(FXO_EVENTS, 1) end
+end
+
+local P = "[ForgeTax] "
+local function log(s) print(P .. tostring(s)) end
+
+-- =========================== 自建内存（开关 + 备份） ===========================
+-- fxo_ctl (64 字节)
+--   +0x05 Byte   1 = 开启强制结果
+--   +0x06 Byte   强制的结果值：1损坏 2维持 3成功 4大成功（默认 4；0/非法值按 4）
+--   +0x07 Byte   1 = 同步界面概率显示（把界面的 5 个概率写成 0/0/0/0/1000）
+-- fxo_roll_bak : 保存 Roll 的原始 6 字节，用于还原
+local U_FORCEROLL, U_FORCEVAL, U_UISYNC = 5, 6, 7
+local U_SIZE = 64
+local FORCE_DEFAULT = 4
+local FORCE_ON_BY_DEFAULT = 1   -- 首次运行时 [★1] 默认打开（1=开；不想自动开就改 0）
+
+local fxo_state = {
+    room = 0, balance = 0, rowData = 0, rowCount = 0, maxGrade = 0,
+    sword = 0, rowIdx = 0, roll = 0, rollPatched = false, saidOn = false, tick = 0,
+    pid = 0,            -- 初始化时锁定的目标进程 PID
+    failCount = 0,      -- 连续找不到游戏对象的次数
+    monoInited = false, -- mono 初始化只做一次（避免反复注入 DLL）
+    stopped = false,    -- stopScript 置位：让排队中的定时器 tick 全部失效
+    offsetsResolved = false,  -- 运行期偏移只解析一次
+}
+
+local function sym(name) return getAddressSafe(name) end
+local function byteAt(addr, i) return readBytes(addr + i, 1) end   -- count=1 时返回数字
+local function hx(a)
+    if type(a) == "number" then return string.format("0x%X", a) end
+    return tostring(a)
+end
+
+local function setSymbol(name, addr)
+    pcall(unregisterSymbol, name)
+    if addr and addr ~= 0 then pcall(registerSymbol, name, addr, true) end
+end
+
+local function allocMem(size)
+    local a
+    if type(allocateMemory) == "function" then pcall(function() a = allocateMemory(size) end) end
+    if (not a or a == 0) and type(alloc) == "function" then pcall(function() a = alloc(size, 0) end) end
+    if a == 0 then a = nil end
+    return a
+end
+
+-- ================================ Mono 解析 ================================
+local function ensureMono()
+    if type(mono_initialize) ~= "function" then return false end
+    -- 关键：注入/初始化整个脚本生命周期只做一次。
+    -- 每次重试都调用会导致 CE 反复往目标进程注入 mono 数据收集器，把 CE 卡死。
+    if not fxo_state.monoInited then
+        fxo_state.monoInited = true
+        if CFG.autoActivateMono then
+            pcall(LaunchMonoDataCollector)
+            pcall(mono_initialize)
+        end
+    end
+    local dom = mono_enumDomains()
+    if dom and #dom &gt; 0 then
+        pcall(mono_setCurrentDomain, dom[1])
+        return true, dom[1]
+    end
+    return false, CFG.autoActivateMono and "Mono 未就绪"
+        or "Mono 未就绪（已关闭自动激活，请手动执行 CE 菜单 Mono → Activate Mono Features）"
+end
+
+-- 找出有效实例：类复核 + 字段合理性 双重校验（实例扫描会有误命中）
+-- 校验链（哪一环失败都会写进诊断信息，便于区分"没进存档"还是"游戏版本不同"）：
+--   ① mono_object_getClass(addr) == 类        地址确实是该类实例
+--   ② bal  = *(room + 0x148) 有效指针         enhancementBalance 存在
+--   ③ maxG = *(int*)(bal + 0x2C) &gt; 0          maxGrade 合理
+--   ④ rows = *(ptr*)(bal + 0x18) 有效指针     概率表容器存在
+--   ⑤ *(int*)(rows + 0x18) == maxG + 1        长度与 maxGrade 自洽（严格）
+--   ⑤' 宽松兜底：长度 &gt; 0 就先用，只打提示（应对版本差异导致的容器类型不同）
+local function safeRead(fn, addr)
+    if not addr or addr == 0 then return nil end
+    local ok, v = pcall(fn, addr)
+    if not ok or v == nil then return nil end
+    return v
+end
+
+local function resolve()
+    local ok, domain = ensureMono()
+    if not ok then return nil, "Mono 未就绪（请先 CE 菜单 Mono → Activate Mono Features）" end
+
+    -- 运行期解析字段偏移（整个进程生命周期只做一次）
+    if not fxo_state.offsetsResolved then
+        resolveOffsets()
+        fxo_state.offsetsResolved = true
+        log(string.format("偏移已解析：balance=+0x%X display=+0x%X onAnvil=+0x%X rows=+0x%X maxGrade=+0x%X sword.value=+0x%X",
+            OFF.room_balance or 0, OFF.room_display or 0, OFF.room_onAnvil or 0,
+            OFF.bal_rows or 0, OFF.bal_maxGrade or 0, OFF.sword_value or 0))
+    end
+
+    local cls = mono_findClass("", CFG.roomClass)
+    if not cls or cls == 0 then
+        return nil, "找不到类 " .. CFG.roomClass .. "（游戏版本不同？或还没进入存档）"
+    end
+
+    local balCls = mono_findClass("", "ForgeEnhancementBalance")   -- 判定真身的依据
+
+    local list = mono_class_findInstancesOfClassListOnly(domain, cls, nil) or {}
+
+    -- ① 类复核（实例扫描会有大量误命中）
+    local cand = {}
+    for i = 1, #list do
+        local a = list[i]
+        local okc, c = pcall(mono_object_getClass, a)
+        if okc and c == cls then cand[#cand + 1] = a end
+    end
+
+    local diag, sawEmptyRoom, best = {}, false, nil
+    for i = 1, #cand do
+        local a = cand[i]
+        local bal = safeRead(readPointer, a + OFF.room_balance)
+
+        -- ② 确认真身：平衡表的"对象类"必须就是 ForgeEnhancementBalance
+        --    （不靠魔法偏移判断，所以换版本只要字段名/类型不变就能认出来）
+        local isReal = false
+        if bal and bal &gt; 0x10000 and balCls and balCls ~= 0 then
+            local okb, bc = pcall(mono_object_getClass, bal)
+            isReal = okb and bc == balCls
+        end
+
+        if not isReal then
+            if not bal or bal == 0 then sawEmptyRoom = true end
+            diag[#diag + 1] = string.format("#%d room=%s bal=%s（非 ForgeEnhancementBalance）",
+                i, hx(a), hx(bal or 0))
+        else
+            local maxG = safeRead(readInteger, bal + OFF.bal_maxGrade)
+            local rows = safeRead(readPointer, bal + OFF.bal_rows)
+            local len = (rows and rows &gt; 0x10000) and safeRead(readInteger, rows + OFF.arr_len) or nil
+            diag[#diag + 1] = string.format("#%d room=%s bal=%s OK maxGrade=%s rows=%s len=%s",
+                i, hx(a), hx(bal), tostring(maxG), hx(rows or 0), tostring(len))
+
+            local okBase = maxG and maxG &gt; 0 and maxG &lt;= 4096
+                and rows and rows &gt; 0x10000 and len and len &gt; 0
+            if okBase and len == maxG + 1 then                 -- ③ 严格匹配
+                return {
+                    room = a, balance = bal,
+                    rowData = rows + OFF.arr_data,
+                    rowCount = len, maxGrade = maxG,
+                }
+            end
+            if okBase and not best then                        -- ③' 宽松兜底
+                best = {
+                    room = a, balance = bal,
+                    rowData = rows + OFF.arr_data,
+                    rowCount = len, maxGrade = maxG,
+                }
+            end
+        end
+    end
+
+    if best then
+        log(string.format("提示：概率表结构未完全匹配（len=%d, maxGrade=%d），已按宽松模式继续",
+            best.rowCount, best.maxGrade))
+        return best
+    end
+
+    -- 失败：给出能直接回报的具体原因
+    if #cand == 0 then
+        return nil, string.format("找到类但没找到实例（扫描候选 %d 个，全被类复核排除）"
+            .. "——多半是还没进入存档，或 CE 的 Mono 数据收集器与游戏不匹配", #list)
+    end
+    if sawEmptyRoom then
+        return nil, "找到房间对象，但概率表还没初始化 —— 请先进入存档（读档 / 开始锻造）后重跑本脚本"
+    end
+    return nil, "找到房间对象但字段结构对不上（游戏版本可能不同）。明细: " .. table.concat(diag, " | ")
+end
+
+-- 轻量校验（每 tick 用，避免频繁做全内存扫描）
+local function stillValid()
+    local r = fxo_state
+    if r.room == 0 then return false end
+    if readPointer(r.room + OFF.room_balance) ~= r.balance then return false end
+    local rowsObj = r.balance + OFF.bal_rows
+    if readPointer(rowsObj) ~= (r.rowData - OFF.arr_data) then return false end
+    if readInteger(rowsObj + OFF.arr_len) ~= r.rowCount then return false end
+    return true
+end
+
+-- 我们的补丁特征：入口 B8 &lt;值&gt; 00 00 00 C3
+local function isPatched(addr)
+    return byteAt(addr, 0) == 0xB8 and byteAt(addr, 5) == 0xC3
+        and byteAt(addr, 2) == 0 and byteAt(addr, 3) == 0 and byteAt(addr, 4) == 0
+end
+
+local function patchedValue(addr)
+    if not isPatched(addr) then return nil end
+    return byteAt(addr, 1)
+end
+
+local function isPrologue(b)
+    return b == 0x55 or b == 0x48 or b == 0x4C or b == 0x53 or b == 0x56 or b == 0x57 or b == 0x41
+end
+
+-- 定位 Roll 的原生代码地址（JIT 地址每次启动都不同，所以每次运行都要重新取）
+local function resolveRoll()
+    if type(mono_compile_method) ~= "function" then return nil, "CE 缺少 mono_compile_method" end
+    local cls = mono_findClass("", ROLL_CLASS)
+    if not cls or cls == 0 then return nil, "找不到类 " .. ROLL_CLASS end
+    local m = mono_class_findMethod(cls, ROLL_METHOD)
+    if not m or m == 0 then return nil, "找不到方法 " .. ROLL_CLASS .. "." .. ROLL_METHOD end
+    local ok, code = pcall(mono_compile_method, m)
+    if not ok or type(code) ~= "number" or code &lt; 0x1000 then return nil, "取原生地址失败" end
+    if not isPrologue(byteAt(code, 0)) and not isPatched(code) then
+        return nil, string.format("入口字节不像代码(0x%02X)", byteAt(code, 0))
+    end
+    return code
+end
+
+-- ============================== 补丁 打 / 还原 ==============================
+-- 备份策略（三层，保证"取消勾选 / 关开关"一定能还原）：
+--   ① 目标进程内存：符号 fxo_roll_bak（脚本重跑时**不再注销**它）
+--   ② CE 的 Lua 全局表 FXO_ORIG（同一次 CE 会话内一定存活）
+--   ③ 内置原始序言常量（本游戏版本已多次实测：push rbp; mov rbp,rsp; sub rsp,0x60）
+-- v3.0.3 修复：v3.0.1 的"启动清理旧符号"会把 fxo_roll_bak 一起注销，导致
+--   补丁仍在、备份却没了 → 取消勾选时还原失败、强制大成功一直生效。
+
+local KNOWN_ORIG = { 0x55, 0x48, 0x8B, 0xEC, 0x48, 0x83 }   -- ③ 兜底
+FXO_ORIG = FXO_ORIG or {}                                    -- ② CE 会话内全局备份
+
+local function readSix(addr)
+    local t = {}
+    for i = 1, ROLL_PATCH_LEN do t[i] = byteAt(addr, i - 1) end
+    return t
+end
+
+local function backupValid(t)
+    return type(t) == "table" and #t &gt;= ROLL_PATCH_LEN and isPrologue(t[1])
+end
+
+-- 保存原始 6 字节（内存 + 全局），只在"当前确实是原始字节"时调用
+local function saveBackup(code)
+    local orig = readSix(code)
+    if not backupValid(orig) then return false end
+    FXO_ORIG[code] = orig
+    local bak = sym("fxo_roll_bak")
+    if not bak or bak == 0 then
+        bak = allocMem(32)
+        if not bak then return false end
+        setSymbol("fxo_roll_bak", bak)
+    end
+    for i = 1, ROLL_PATCH_LEN do pcall(writeBytes, bak + i - 1, orig[i]) end
+    return true
+end
+
+-- 依次尝试三层备份；都拿不到返回 nil
+local function loadBackup(code)
+    local bak = sym("fxo_roll_bak")
+    if bak and bak ~= 0 then
+        local t = readSix(bak)
+        if backupValid(t) then return t, "内存备份" end
+    end
+    if backupValid(FXO_ORIG[code]) then return FXO_ORIG[code], "CE 全局备份" end
+    return nil
+end
+
+-- on=true 打补丁（value=结果值）；on=false 还原。返回 (成功?, 说明)
+local function applyRollPatch(on, value)
+    local code = fxo_state.roll
+    if not code then
+        local nc, why = resolveRoll()
+        if not nc then return false, "Roll 未解析（" .. tostring(why) .. "）" end
+        code = nc
+        fxo_state.roll = code
+        setSymbol("fxo_roll", code)
+    end
+    -- 地址失效（重新 JIT / 换了进程）→ 重新解析
+    if not isPrologue(byteAt(code, 0)) and not isPatched(code) then
+        local nc = resolveRoll()
+        if nc then
+            fxo_state.roll = nc
+            setSymbol("fxo_roll", nc)
+            code = nc
+        else
+            return false, "Roll 地址已失效"
+        end
+    end
+
+    if not on then
+        ev("applyRollPatch(off)")
+        if isPatched(code) then
+            local orig, src = loadBackup(code)
+            if not orig then
+                orig, src = KNOWN_ORIG, "内置原始序言(兜底)"
+                log("警告：三层备份都不可用，已用本版本内置序言还原；如游戏异常请重开游戏")
+            end
+            for i = 1, ROLL_PATCH_LEN do pcall(writeBytes, code + i - 1, orig[i]) end
+            fxo_state.rollPatched = false
+            return true, "已还原（来源：" .. tostring(src) .. "）"
+        end
+        fxo_state.rollPatched = false
+        return true, "当前没有补丁，无需还原"
+    end
+
+    value = math.floor(tonumber(value) or FORCE_DEFAULT)
+    if value &lt; 1 or value &gt; 4 then value = FORCE_DEFAULT end   -- 0/非法值按大成功（防误操作）
+    if isPatched(code) and patchedValue(code) == value then
+        -- 已经在位：确保备份仍然可用（否则补一份，保证以后能还原）
+        if not loadBackup(code) then
+            FXO_ORIG[code] = KNOWN_ORIG
+            local bak = sym("fxo_roll_bak")
+            if not bak or bak == 0 then bak = allocMem(32) end
+            if bak and bak ~= 0 then
+                setSymbol("fxo_roll_bak", bak)
+                for i = 1, ROLL_PATCH_LEN do pcall(writeBytes, bak + i - 1, KNOWN_ORIG[i]) end
+            end
+            log("提示：补丁已在位但备份缺失，已用内置原始序言补齐备份")
+        end
+        fxo_state.rollPatched = true      -- 关键：已在位也要标记，否则停止时不会还原
+        return true
+    end
+
+    ev("applyRollPatch(on," .. tostring(value) .. ")")
+    if not isPatched(code) then saveBackup(code) end
+    local bytes = rollPatchBytes(value)
+    for i = 1, ROLL_PATCH_LEN do pcall(writeBytes, code + i - 1, bytes[i]) end
+    fxo_state.rollPatched = true
+    return true
+end
+
+-- 把界面上的 5 个概率也同步成 0/0/0/0/1000（纯显示，让界面与"必大成功"一致）
+local function syncDisplayChances()
+    local d = sym("fxo_display")
+    if not d or d == 0 then return false end
+    local base = d + OFF.disp_chances
+    if readInteger(base) ~= 0 or readInteger(base + 4) ~= 0 or readInteger(base + 8) ~= 0
+        or readInteger(base + 12) ~= 0 or readInteger(base + 16) ~= 1000 then
+        writeInteger(base, 0)
+        writeInteger(base + 4, 0)
+        writeInteger(base + 8, 0)
+        writeInteger(base + 12, 0)
+        writeInteger(base + 16, 1000)
+    end
+    return true
+end
+
+-- =============================== 符号刷新 ===============================
+local function refreshSymbols(force)
+    local r = fxo_state
+    local sword = readPointer(r.room + OFF.room_onAnvil)
+    if not sword or sword &lt; 0x10000 then sword = readPointer(r.room + OFF.room_target) end
+    if not sword or sword &lt; 0x10000 then sword = readPointer(r.room + OFF.room_held) end
+    if not sword or sword &lt; 0x10000 then sword = 0 end
+
+    -- 当前概率行索引 = 剑上的 strikes 字段（GetChances 直接拿它当数组下标）
+    local idx = 0
+    if sword ~= 0 then
+        idx = readInteger(sword + OFF.sword_strikes)
+        if type(idx) ~= "number" or idx &lt; 0 then idx = 0 end
+        if idx &gt; r.maxGrade then idx = r.maxGrade end
+    end
+
+    local display = readPointer(r.room + OFF.room_display)
+    if not display or display &lt; 0x10000 then display = 0 end
+
+    local same = (not force) and r.sword == sword and r.rowIdx == idx and r.symDisplay == display
+    r.sword, r.rowIdx, r.symDisplay = sword, idx, display
+    if same then return end
+
+    setSymbol("fxo_room", r.room)
+    setSymbol("fxo_row", r.rowData + idx * 24)
+    setSymbol("fxo_sword", sword)
+    setSymbol("fxo_value", sword + OFF.sword_value)
+    setSymbol("fxo_strikes", sword + OFF.sword_strikes)
+    setSymbol("fxo_grade", sword + OFF.sword_grade)
+    setSymbol("fxo_outcome", sword + OFF.sword_outcome)
+    setSymbol("fxo_broken", sword + OFF.sword_broken)
+    setSymbol("fxo_display", display)
+end
+
+-- ============================== 地址列表条目 ==============================
+local function addRecord(desc, address, vtype)
+    local al = getAddressList()
+    for i = 0, al.Count - 1 do
+        local rec = al.getMemoryRecord(i)
+        if rec.Description == desc then
+            rec.Address = address
+            rec.Type = vtype
+            return rec
+        end
+    end
+    local rec = al:createMemoryRecord()
+    rec.Description = desc
+    rec.Address = address
+    rec.Type = vtype
+    return rec
+end
+
+local function removeRecordsContaining(sub)
+    local al = getAddressList()
+    for i = al.Count - 1, 0, -1 do
+        local rec = al.getMemoryRecord(i)
+        local d = rec.Description
+        if d and d:find(sub, 1, true) then
+            if not pcall(function() rec.delete() end) then
+                pcall(function() al:deleteMemoryRecord(rec) end)
+            end
+        end
+    end
+end
+
+-- ============================== 条目排版 ==============================
+-- CE 没有"移动条目"的 API，所以要让顺序固定，做法是：**每次运行都按顺序重建自己的条目**。
+-- 只重建"我们自己的"条目（按描述子串识别），不会碰用户自己的条目；
+-- AA 启动条目 [★0] 由外部（CT 生成器）放在第一位，脚本不删除它。
+local AA_DESC = "[★0] 启动/重新定位（勾选即生效）"
+
+-- 属于本脚本的条目识别（子串匹配；同时覆盖历史版本的旧名字，顺便清理）
+local OWN_SUBSTRINGS = {
+    "ForgeTax 辅助脚本", "启动/重新定位", "作者 YC",
+    "──", "① 附加", "② 勾选", "③ [★2]", "④ 关闭",
+    "[★1]", "[★2]", "[★3]",
+    "[1] 剑·", "[备] 界面概率", "[备] 本期订单额", "[备] 已完成交付",
+    -- 历史遗留（老版本用过的名字）
+    "强制结果(1=开·推荐)", "改表·次次大成功", "改表·剑永不破坏", "强制保险 insured",
+    "保护一击", "护符 ward&gt;=9", "同步UI概率显示", "Roll 前8字节", "强制结果值",
+    "参考·会按等级重算", "剑·等级 grade", "已敲次数 strikes", "上次结果 outcome",
+    "已损坏 broken", "[概率]", "[UI权重‰]", "订单 quota", "已完成 delivered",
+    "[锁]", "剑价值（真值·可改）", "概率行] 等级", "[加成%]", "[开关] 连击",
+    "价值(房间缓存)", "UI·显示价值", "Roll 入口地址", "·改表)", "次次大成功(1=开)",
+    "剑永不破坏(1=开)",
+}
+
+local function isOwnRecord(desc)
+    if not desc or desc == "" then return false end
+    if desc == AA_DESC then return false end          -- 绝不删 AA 启动条目
+    for _, sub in ipairs(OWN_SUBSTRINGS) do
+        if desc:find(sub, 1, true) then return true end
+    end
+    return false
+end
+
+local function deleteRecord(rec)
+    local al = getAddressList()
+    if not pcall(function() rec.delete() end) then
+        pcall(function() al:deleteMemoryRecord(rec) end)
+    end
+end
+
+local function clearOwnRecords()
+    local al = getAddressList()
+    local n = 0
+    for i = al.Count - 1, 0, -1 do
+        local rec = al.getMemoryRecord(i)
+        if isOwnRecord(rec.Description) then deleteRecord(rec); n = n + 1 end
+    end
+    return n
+end
+
+-- 分组标题：用 CE 原生的 GroupHeader（粗体、不可勾选）
+local function mkHeader(desc)
+    local rec = getAddressList():createMemoryRecord()
+    rec.Description = desc
+    pcall(function() rec.GroupHeader = true end)
+    return rec
+end
+
+-- 纯说明行：没有地址，只显示文字
+local function mkNote(desc)
+    local rec = getAddressList():createMemoryRecord()
+    rec.Description = desc
+    return rec
+end
+
+local function mkValue(desc, address, vtype)
+    local rec = getAddressList():createMemoryRecord()
+    rec.Description = desc
+    rec.Address = address
+    rec.Type = vtype
+    return rec
+end
+
+-- 全局函数：外部（CT 生成器）也可以调用它来重建排版
+function ForgeTaxBuildLayout()
+    mkHeader("═══ ForgeTax 辅助脚本 —— 敲击结果控制 + 剑数据查看 ═══")
+    mkNote("    作者 YC      版本 v" .. VERSION .. "      适用 ForgeTax.exe（Unity Mono） / CE 7.5+")
+    mkNote("    ① 附加 ForgeTax.exe → CE 菜单 Mono → Activate Mono Features")
+    mkNote("    ② 勾选最上面的 [★0] 启动/重新定位（或直接勾选下面的 [★1]）")
+    mkNote("    ③ [★2] 想固定成别的结果就改：1=损坏  2=维持  3=成功  4=大成功")
+    mkNote("    ④ 关闭：[★0] 取消勾选，或把 [★1] 改回 0 → 自动还原原始字节")
+
+    mkHeader("────────── 功能开关 ──────────")
+    mkValue("[★1] 强制大成功（1=开·推荐）", "fxo_ctl+5", vtByte)
+    mkValue("[★2] 强制结果值（1损坏/2维持/3成功/4大成功）", "fxo_ctl+6", vtByte)
+    mkValue("[★3] 同步界面概率显示（1=开）", "fxo_ctl+7", vtByte)
+
+    mkHeader("────────── 当前剑（读到数字 = 脚本已就绪）──────────")
+    mkValue("[1] 剑·价值", "fxo_value", vtDouble)
+    mkValue("[1] 剑·等级", "fxo_grade", vtDword)
+    mkValue("[1] 剑·敲击次数", "fxo_strikes", vtDword)
+    mkValue("[1] 剑·上次结果（0破坏 1损坏 2维持 3成功 4大成功）", "fxo_outcome", vtDword)
+    mkValue("[1] 剑·已损坏（1=已损坏）", "fxo_broken", vtByte)
+
+    mkHeader("────────── 界面显示概率（千分比，合计 1000）──────────")
+    mkValue("[备] 界面概率 · 破坏‰", "fxo_display+144", vtDword)
+    mkValue("[备] 界面概率 · 损坏‰", "fxo_display+148", vtDword)
+    mkValue("[备] 界面概率 · 维持‰", "fxo_display+14C", vtDword)
+    mkValue("[备] 界面概率 · 成功‰", "fxo_display+150", vtDword)
+    mkValue("[备] 界面概率 · 大成功‰", "fxo_display+154", vtDword)
+
+    mkHeader("────────── 本局进度 ──────────")
+    mkValue("[备] 本期订单额", "fxo_room+2B0", vtDouble)
+    mkValue("[备] 已完成交付", "fxo_room+2B8", vtDouble)
+end
+
+-- 重建：先清掉自己的旧条目，再按上面的顺序重建（保证顺序固定）
+-- 暴露成全局，CT 生成器也可以调用（它负责把 AA 条目放在第一位）
+function ForgeTaxRebuildTable()
+    local al = getAddressList()
+    clearOwnRecords()
+    local before = al.Count
+    ForgeTaxBuildLayout()
+    return al.Count - before
+end
+
+local function buildTable()
+    return ForgeTaxRebuildTable()
+end
+
+-- ============================== 自动停止 ==============================
+local SYMBOL_NAMES = { "fxo_room", "fxo_row", "fxo_sword", "fxo_value", "fxo_strikes",
+                       "fxo_grade", "fxo_outcome", "fxo_broken", "fxo_display", "fxo_roll" }
+
+-- 主动停止：还原补丁 → 销毁定时器 → 注销符号
+local function stopScript(msg)
+    ev("stopScript: " .. tostring(msg))
+    fxo_state.stopped = true    -- 先让所有排队中的定时器 tick 失效，再还原
+    -- 关键：先把 [★1] / [★3] 开关关掉。
+    -- 补丁是由"开关 + 定时器"共同驱动的，如果只销毁定时器而不关开关，任何漏网
+    -- 的/排队的 tick 跑起来看到开关还是 1，就会把补丁重新写回去（v3.0.5 及以前的问题）。
+    -- 关掉开关后，即使有 tick 跑起来，也只会执行"还原"，不会打补丁。
+    local c0 = sym("fxo_ctl")
+    if c0 and c0 ~= 0 then
+        pcall(writeBytes, c0 + U_FORCEROLL, 0)
+        pcall(writeBytes, c0 + U_UISYNC, 0)
+    end
+    -- 只有在目标进程仍是初始化时那个进程时，才去还原字节（否则读到的是别人的内存）
+    -- 注意：**不要**用 fxo_state.rollPatched 做前置条件 —— 它可能因"补丁已在位"等
+    -- 早期返回路径而为 false，导致明明打了补丁却跳过还原（v3.0.3 之前的 bug）。
+    -- applyRollPatch(false) 内部会自己判断当前字节是否是我们的补丁，没打就什么也不做。
+    local restored, rmsg = true, "无需还原"
+    local pidOk = (fxo_state.pid == 0) or (getOpenedProcessID() == fxo_state.pid)
+    if pidOk then
+        restored, rmsg = applyRollPatch(false)
+    else
+        rmsg = "目标进程已更换，跳过还原（重开游戏即可）"
+    end
+    log("还原 Roll：" .. tostring(rmsg))
+    -- 诊断信息（挂到全局，方便外部查看这次停止到底做了什么）
+    FXO_LAST_STOP = {
+        restored = restored, msg = rmsg,
+        patchedFlag = fxo_state.rollPatched, roll = fxo_state.roll,
+        pid = fxo_state.pid, curPid = getOpenedProcessID(),
+    }
+    if fxo_timer then pcall(function() fxo_timer.destroy() end) fxo_timer = nil end
+    for _, n in ipairs(SYMBOL_NAMES) do pcall(unregisterSymbol, n) end
+    log("已自动停止：" .. tostring(msg))
+    log("请确认 CE 已附加到新的游戏进程（Open Process），然后重新执行本脚本。")
+end
+
+-- ================================ 定时器 ================================
+-- 250ms 一次：失效 → 有限次重试（≤3）→ 仍失败就自动停止。
+-- 目标进程变了（游戏重开）→ 立即停止，绝不反复重试。
+local function startTimer()
+    if fxo_timer then pcall(function() fxo_timer.destroy() end) end
+    local t = createTimer(nil, false)
+    fxo_timer = t
+    t.Interval = 250
+    t.OnTimer = function(timer)
+        -- 保险 1：已经被停止（比如取消勾选）→ 这个 tick 直接丢弃
+        if fxo_state.stopped then return end
+        -- 保险 2：不是当前这一代定时器（重跑脚本产生的旧定时器）→ 丢弃，避免它把补丁写回来
+        if timer ~= fxo_timer then return end
+        local ok, err = pcall(function()
+            -- 目标进程被换掉/关掉 → 立刻停止（游戏重开最常见）
+            local pid = getOpenedProcessID()
+            if not pid or pid == 0 then
+                stopScript("目标进程已关闭（CE 未附加进程）")
+                return
+            end
+            if fxo_state.pid ~= 0 and pid ~= fxo_state.pid then
+                stopScript(string.format("目标进程已更换（%d → %d），游戏可能已重启", fxo_state.pid, pid))
+                return
+            end
+
+            if not stillValid() then
+                fxo_state.failCount = fxo_state.failCount + 1
+                if fxo_state.failCount &gt; 3 then
+                    stopScript("连续 3 次找不到游戏对象（游戏可能已重开或离开存档）")
+                    return
+                end
+                local rr = resolve()
+                if not rr then return end
+                fxo_state.room, fxo_state.balance = rr.room, rr.balance
+                fxo_state.rowData, fxo_state.rowCount = rr.rowData, rr.rowCount
+                fxo_state.maxGrade = rr.maxGrade
+                fxo_state.failCount = 0
+                log("游戏对象已变化，重新解析成功")
+            else
+                fxo_state.failCount = 0
+            end
+
+            local c = sym("fxo_ctl")
+            if not c or c == 0 then return end
+            fxo_state.tick = fxo_state.tick + 1
+            local on = readBytes(c + U_FORCEROLL, 1) ~= 0
+            local val = readBytes(c + U_FORCEVAL, 1)
+            local uiSync = readBytes(c + U_UISYNC, 1) ~= 0
+
+            refreshSymbols(false)
+
+            if on then
+                local okp, why = applyRollPatch(true, val)
+                if okp then
+                    if not fxo_state.saidOn then
+                        fxo_state.saidOn = true
+                        local v = patchedValue(fxo_state.roll) or val
+                        local name = ({ [1] = "损坏", [2] = "维持", [3] = "成功", [4] = "大成功" })[v]
+                        log(string.format("已开启强制结果：Roll@%s → 恒返回 %d（%s）",
+                            hx(fxo_state.roll), v, name or "?"))
+                    end
+                elseif fxo_state.tick % 8 == 0 then
+                    log("强制结果失败：" .. tostring(why))
+                end
+            elseif fxo_state.rollPatched or fxo_state.saidOn then
+                fxo_state.saidOn = false
+                local okp, why = applyRollPatch(false)
+                log(okp and "已关闭强制结果：Roll 原始字节已还原" or ("还原失败：" .. tostring(why)))
+            end
+
+            if uiSync then pcall(syncDisplayChances) end
+        end)
+        if not ok then
+            log("定时器异常，已停止：" .. tostring(err))
+            pcall(function() timer.destroy() end)
+        end
+    end
+    ev("timer created")
+    t.Enabled = true
+end
+
+-- 诊断（Lua 引擎里执行  print(ForgeTaxDiag())）
+function ForgeTaxDiag()
+    local ls = "none"
+    if FXO_LAST_STOP then
+        ls = string.format("restored=%s msg=%s patchedFlag=%s roll=0x%X pid=%s curPid=%s",
+            tostring(FXO_LAST_STOP.restored), tostring(FXO_LAST_STOP.msg),
+            tostring(FXO_LAST_STOP.patchedFlag), FXO_LAST_STOP.roll or 0,
+            tostring(FXO_LAST_STOP.pid), tostring(FXO_LAST_STOP.curPid))
+    end
+    local evs = table.concat(FXO_EVENTS or {}, " | ")
+    local offs = string.format(
+        "OFF: balance=+0x%X display=+0x%X onAnvil=+0x%X rows=+0x%X maxGrade=+0x%X sword.value=+0x%X",
+        OFF.room_balance or 0, OFF.room_display or 0, OFF.room_onAnvil or 0,
+        OFF.bal_rows or 0, OFF.bal_maxGrade or 0, OFF.sword_value or 0)
+    return string.format("roll=0x%X patched=%s timer=%s bak=%s lastStop=[%s]\n%s\nEVENTS: %s",
+        fxo_state and fxo_state.roll or 0, tostring(fxo_state and fxo_state.rollPatched),
+        tostring(fxo_timer ~= nil), tostring((function() local ok, v = pcall(getAddressSafe, "fxo_roll_bak"); if not ok then return nil end return v end)()),
+        ls, offs, evs)
+end
+
+-- 手动停止（Lua 引擎里执行  StopForgeTaxTool()）
+function StopForgeTaxTool()
+    stopScript("手动停止（Roll 原始字节已还原，开关与条目保留，重跑脚本可继续）")
+end
+
+-- ================================ 主流程 ================================
+ev("script run begin")
+-- 关键：上一次运行（尤其是**游戏重启后**）留下的符号指向的是旧进程的地址，
+-- 必须先注销，否则脚本会误以为内存块还在、把开关写到无效地址上。
+-- 注意 fxo_migrated_v3 是纯标记，故意保留。
+do
+    local stale = { "fxo_room", "fxo_row", "fxo_rowdata", "fxo_sword", "fxo_value", "fxo_strikes",
+                    "fxo_grade", "fxo_outcome", "fxo_broken", "fxo_display", "fxo_roll",
+                    "fxo_ctl", "fxo_rows_bak", "fxo_sc",   -- 注意：fxo_roll_bak 故意保留
+                    "fxo_user", "fxo_user2", "fxo_lock_on", "fxo_lock_value" }
+    for _, n in ipairs(stale) do
+        if getAddressSafe(n) ~= nil then pcall(unregisterSymbol, n) end
+    end
+end
+
+-- 确认 CE 已经附加到进程，否则直接退出（避免无意义的重试）
+do
+    local pid = getOpenedProcessID()
+    if not pid or pid == 0 then
+        log("失败：CE 还没有附加任何进程。请先 Open Process 附加 ForgeTax.exe，再执行本脚本。")
+        return "FAILED: no process opened"
+    end
+    fxo_state.pid = pid
+end
+
+local r, err = resolve()
+if not r then
+    log("初始化失败：" .. tostring(err))
+    return "FAILED: " .. tostring(err)
+end
+fxo_state.room, fxo_state.balance = r.room, r.balance
+fxo_state.rowData, fxo_state.rowCount, fxo_state.maxGrade = r.rowData, r.rowCount, r.maxGrade
+fxo_state.stopped = false
+
+-- 开关内存
+if sym("fxo_ctl") == nil then
+    local a = allocMem(U_SIZE)
+    if a then
+        setSymbol("fxo_ctl", a)
+        for i = 0, U_SIZE - 1 do pcall(writeBytes, a + i, 0) end
+        pcall(writeBytes, a + U_FORCEVAL, FORCE_DEFAULT)          -- 强制结果值默认 4=大成功
+        pcall(writeBytes, a + U_FORCEROLL, FORCE_ON_BY_DEFAULT)   -- 强制结果默认打开
+    end
+end
+if sym("fxo_ctl") == nil then log("警告：无法分配开关内存，功能不可用") end
+
+-- 定位 Roll
+do
+    local code, why = resolveRoll()
+    if code then
+        fxo_state.roll = code
+        setSymbol("fxo_roll", code)
+        local b = {}
+        for i = 0, 5 do b[#b + 1] = string.format("%02X", byteAt(code, i)) end
+        log(string.format("Roll 已定位 %s  入口字节 %s", hx(code), table.concat(b, " ")))
+    else
+        log("Roll 未定位（" .. tostring(why) .. "）")
+    end
+end
+
+refreshSymbols(true)
+local n = buildTable()
+startTimer()
+
+-- 自检输出
+log(string.format("ForgeTax SwordTool v%s by %s", VERSION, AUTHOR))
+log(string.format("房间 %s   概率表 %d 行（maxGrade=%d）", hx(r.room), r.rowCount, r.maxGrade))
+if fxo_state.sword and fxo_state.sword &gt; 0x10000 then
+    log(string.format("当前剑 %s   价值=%s  等级=%s  敲击=%s  上次结果=%s", hx(fxo_state.sword),
+        tostring(readDouble(fxo_state.sword + OFF.sword_value)),
+        tostring(readInteger(fxo_state.sword + OFF.sword_grade)),
+        tostring(readInteger(fxo_state.sword + OFF.sword_strikes)),
+        tostring(readInteger(fxo_state.sword + OFF.sword_outcome))))
+else
+    log("当前砧上没有剑（把剑放上去后 [1] 剑·价值 就会显示数字）")
+end
+log("已建立 " .. n .. " 个条目。用法：把 [★1] 强制大成功 改成 1 即可（[★2] 保持 4）")
+return string.format("ForgeTax SwordTool v%s ready (%d records)", VERSION, n)
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if StopForgeTaxTool then StopForgeTaxTool() end
+{$asm}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>146</ID>
+      <Description>"═══ ForgeTax 辅助脚本 —— 敲击结果控制 + 剑数据查看 ═══"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>147</ID>
+      <Description>"    作者 YC      版本 v3.2.0      适用 ForgeTax.exe（Unity Mono） / CE 7.5+"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>148</ID>
+      <Description>"    ① 附加 ForgeTax.exe → CE 菜单 Mono → Activate Mono Features"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>149</ID>
+      <Description>"    ② 勾选最上面的 [★0] 启动/重新定位（或直接勾选下面的 [★1]）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>150</ID>
+      <Description>"    ③ [★2] 想固定成别的结果就改：1=损坏  2=维持  3=成功  4=大成功"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>151</ID>
+      <Description>"    ④ 关闭：[★0] 取消勾选，或把 [★1] 改回 0 → 自动还原原始字节"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>152</ID>
+      <Description>"────────── 功能开关 ──────────"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>153</ID>
+      <Description>"[★1] 强制大成功（1=开·推荐）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>fxo_ctl+5</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>154</ID>
+      <Description>"[★2] 强制结果值（1损坏/2维持/3成功/4大成功）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>fxo_ctl+6</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>155</ID>
+      <Description>"[★3] 同步界面概率显示（1=开）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>fxo_ctl+7</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>156</ID>
+      <Description>"────────── 当前剑（读到数字 = 脚本已就绪）──────────"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>157</ID>
+      <Description>"[1] 剑·价值"</Description>
+      <VariableType>Double</VariableType>
+      <Address>fxo_value</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>158</ID>
+      <Description>"[1] 剑·等级"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_grade</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>159</ID>
+      <Description>"[1] 剑·敲击次数"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_strikes</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>160</ID>
+      <Description>"[1] 剑·上次结果（0破坏 1损坏 2维持 3成功 4大成功）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_outcome</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>161</ID>
+      <Description>"[1] 剑·已损坏（1=已损坏）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>fxo_broken</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>162</ID>
+      <Description>"────────── 界面显示概率（千分比，合计 1000）──────────"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>163</ID>
+      <Description>"[备] 界面概率 · 破坏‰"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_display+144</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>164</ID>
+      <Description>"[备] 界面概率 · 损坏‰"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_display+148</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>165</ID>
+      <Description>"[备] 界面概率 · 维持‰"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_display+14C</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>166</ID>
+      <Description>"[备] 界面概率 · 成功‰"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_display+150</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>167</ID>
+      <Description>"[备] 界面概率 · 大成功‰"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>fxo_display+154</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>168</ID>
+      <Description>"────────── 本局进度 ──────────"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>169</ID>
+      <Description>"[备] 本期订单额"</Description>
+      <VariableType>Double</VariableType>
+      <Address>fxo_room+2B0</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>170</ID>
+      <Description>"[备] 已完成交付"</Description>
+      <VariableType>Double</VariableType>
+      <Address>fxo_room+2B8</Address>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols/>
+  <LuaScript></LuaScript>
+</CheatTable>
