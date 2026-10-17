@@ -468,7 +468,7 @@ end
 local ENTRIES = {
   {t = "header", d = "═══ 挂机破坏神 辅助脚本 —— 角色状态 + 数值修改 ═══"},
   {t = "note",   d = "    作者 YC      版本 v" .. VERSION .. "      适用 Deskrawl.exe（Unity IL2CPP） / CE 7.5+"},
-  {t = "note",   d = "    ① 附加 Deskrawl.exe → 勾选 [★0] 启动/重新定位（进游戏读档后再勾更佳）"},
+  {t = "note",   d = "    用法：附加 Deskrawl.exe → 勾选最上面的 [★0]（进游戏读档后再勾更佳）"},
   {t = "note",   d = "    ② 「实时数据」直接读写内存，改动立即生效"},
   {t = "note",   d = "    ③ 「存档数据」改动需回主菜单重新读档后生效"},
   {t = "note",   d = "    ④ 属性/战斗/金币类开关直接改写加密字段（已破解 ACTk 算法）；填 0 或取消勾选即还原"},
@@ -496,7 +496,7 @@ local ENTRIES = {
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
   {t = "value",  d = "[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）", sym = SYM.SAVESCAN, vt = vtByte},
   {t = "header", d = "────────── 脚本状态 ──────────"},
-  {t = "value",  d = "[★0] 启动 / 重新定位（1=运行）", sym = SYM.CTL, vt = vtByte},
+  {t = "value",  d = "[★0] 主脚本运行状态（1=运行 2=就绪 3=失联重试）", sym = SYM.CTL, vt = vtByte},
 }
 
 local function deleteOwnEntries()
