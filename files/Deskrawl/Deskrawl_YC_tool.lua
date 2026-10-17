@@ -58,6 +58,7 @@ local g_pccOff, g_plOff = nil, nil   -- cached chain offsets
 local g_lastSaveScan = 0             -- throttle for save-instance rescans
 local g_startedAt = nil               -- tool start time (skip heavy scans early)
 local g_scanTries, g_scanNext = 0, 0  -- [★21] save-scan retry state
+local g_buf = nil                      -- live stat display buffer (target side)
 local g_killList = {}                -- Enemy instances for one-hit-kill
 local g_lastKillScan = 0             -- throttle for enemy rescan
 local g_charOff = {}                 -- Character field offsets (BaseMoveSpeed etc)
@@ -465,6 +466,56 @@ local function refreshKillList()
   return res
 end
 
+-- ------------------------------------------------- live stat display buffer
+-- SaveData objects are transient (they only exist for a few seconds around
+-- load/save), but the same numbers live permanently on the Player/Character
+-- object in encrypted ACTk fields. We decrypt them once per tick into a small
+-- buffer in the target and bind the cheat entries there -> never "??".
+local function decInt32(addr)
+  local h = rdi(addr + 4)
+  local k = rdi(addr + 8)
+  if not h or not k then return nil end
+  return ((h - k) % 0x100000000) ~ k
+end
+local function decLong64(addr)
+  -- ObscuredLong layout: hash@0, pad@4, hidden@8 (lo,hi), key@16 (lo,hi), fake@24
+  local l1, h1 = rdi(addr + 8), rdi(addr + 0xC)
+  local l2, h2 = rdi(addr + 0x10), rdi(addr + 0x14)
+  if not (l1 and h1 and l2 and h2) then return nil end
+  local hi = ((h1 & 0xFFFFFFFF) << 32) | (l1 & 0xFFFFFFFF)
+  local ky = ((h2 & 0xFFFFFFFF) << 32) | (l2 & 0xFFFFFFFF)
+  return ((hi - ky) ~ ky) % 0x100000000
+end
+local function decFloat32(addr)
+  local hidden = rdi(addr + 4)
+  local key = rdi(addr + 8)
+  if not hidden or not key then return nil end
+  local b0 = hidden & 0xFF
+  local b1 = (hidden >> 8) & 0xFF
+  local b2 = (hidden >> 16) & 0xFF
+  local b3 = (hidden >> 24) & 0xFF
+  local swapped = b0 + b1 * 0x10000 + b2 * 0x100 + b3 * 0x1000000
+  local bits = (swapped ~ key) & 0xFFFFFFFF
+  writeInteger(g_tmpMem, bits)
+  return readFloat(g_tmpMem)
+end
+local function refreshStatBuf()
+  if not g_buf or not g_player then return end
+  if rdq(g_player + 0) ~= g_cls.Player then return end
+  local lv = decInt32(g_player + 0x20)
+  if lv then writeInteger(g_buf + 0, lv) end
+  local hp = decLong64(g_player + 0x30)
+  if hp then writeInteger(g_buf + 4, hp) end
+  local dm = decLong64(g_player + 0x50)
+  if dm then writeInteger(g_buf + 8, dm) end
+  local mm = decLong64(g_player + 0xD8)
+  if mm then writeInteger(g_buf + 12, mm) end
+  if g_charOff and g_charOff.BasePrimaryStat then
+    local ps = decFloat32(g_player + g_charOff.BasePrimaryStat)
+    if ps then writeFloat(g_buf + 16, ps) end
+  end
+end
+
 -- ---------------------------------------------------------------- entries
 local ENTRIES = {
   {t = "header", d = "═══ 挂机破坏神 辅助脚本 —— 角色状态 + 数值修改 ═══"},
@@ -476,14 +527,14 @@ local ENTRIES = {
   {t = "header", d = "────────── 实时数据（[3] 金币需勾 [★G0] 金币模块）──────────"},
   {t = "value",  d = "[1] 当前生命", sym = SYM.HP, vt = vtDword},
   {t = "value",  d = "[2] 当前法力", sym = SYM.MANA, vt = vtDword},
-  {t = "header", d = "────────── 存档数据（显示 ?? 时勾 [★21] 扫描存档）──────────"},
-  {t = "value",  d = "[4] 等级", sym = SYM.LEVEL, vt = vtDword},
-  {t = "value",  d = "[5] 当前经验", sym = SYM.XP, vt = vtDword},
-  {t = "value",  d = "[6] 最大生命（基础）", sym = SYM.MAXHP, vt = vtDword},
-  {t = "value",  d = "[7] 基础伤害", sym = SYM.DMG, vt = vtDword},
-  {t = "value",  d = "[8] 最大法力（基础）", sym = SYM.MAXMANA, vt = vtDword},
-  {t = "value",  d = "[9] 主属性（智力/力量）", sym = SYM.PSTAT, vt = vtSingle},
-  {t = "value",  d = "[10] 可用天赋点", sym = SYM.TALENT, vt = vtDword},
+  {t = "header", d = "────────── 角色数据 ──────────"},
+  {t = "value",  d = "[4] 等级（实时）", sym = SYM.LEVEL, vt = vtDword},
+  {t = "value",  d = "[5] 当前经验（存档对象瞬态，需勾 [★21]）", sym = SYM.XP, vt = vtDword},
+  {t = "value",  d = "[6] 最大生命（基础·实时）", sym = SYM.MAXHP, vt = vtDword},
+  {t = "value",  d = "[7] 基础伤害（实时）", sym = SYM.DMG, vt = vtDword},
+  {t = "value",  d = "[8] 最大法力（基础·实时）", sym = SYM.MAXMANA, vt = vtDword},
+  {t = "value",  d = "[9] 主属性（智力/力量·实时）", sym = SYM.PSTAT, vt = vtSingle},
+  {t = "value",  d = "[10] 可用天赋点（存档对象瞬态，需勾 [★21]）", sym = SYM.TALENT, vt = vtDword},
   {t = "header", d = "────────── 属性修改（立即生效）──────────"},
   {t = "value",  d = "[★12] 移动速度设定（默认 8，0=不修改）", sym = SYM.MSSET, vt = vtSingle},
   {t = "value",  d = "[13] 移动速度当前值", sym = SYM.MSSHOW, vt = vtSingle},
@@ -562,13 +613,14 @@ function registerAll()
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
   if g_player and g_manaOff then reg(SYM.MANA, g_player + g_manaOff) else unreg(SYM.MANA) end
-  if g_save and o.Level then reg(SYM.LEVEL, g_save + o.Level) else unreg(SYM.LEVEL) end
-  if g_save and o.CurrentXP then reg(SYM.XP, g_save + o.CurrentXP) else unreg(SYM.XP) end
-  if g_save and o.BaseMaxHealth then reg(SYM.MAXHP, g_save + o.BaseMaxHealth) else unreg(SYM.MAXHP) end
-  if g_save and o.BaseDamage then reg(SYM.DMG, g_save + o.BaseDamage) else unreg(SYM.DMG) end
-  if g_save and o.BaseMaxMana then reg(SYM.MAXMANA, g_save + o.BaseMaxMana) else unreg(SYM.MAXMANA) end
-  if g_save and o.BasePrimaryStat then reg(SYM.PSTAT, g_save + o.BasePrimaryStat) else unreg(SYM.PSTAT) end
-  if g_save and o.TalentOutstandingPoints then reg(SYM.TALENT, g_save + o.TalentOutstandingPoints) else unreg(SYM.TALENT) end
+  -- live sources first: they never disappear
+  if g_buf then
+    reg(SYM.LEVEL, g_buf + 0)
+    reg(SYM.MAXHP, g_buf + 4)
+    reg(SYM.DMG, g_buf + 8)
+    reg(SYM.MAXMANA, g_buf + 12)
+    reg(SYM.PSTAT, g_buf + 16)
+  end
 end
 
 -- ---------------------------------------------------------------- tick
@@ -764,6 +816,9 @@ local function tick()
     g_scanTries, g_scanNext = 0, 0
   end
 
+  -- live stat display buffer (cheap decrypts, keeps rows readable)
+  refreshStatBuf()
+
   -- one-hit-kill: throttled full-enemy rescan while enabled
   if g_killOn and os.clock() - g_lastKillScan > 30 then
     g_lastKillScan = os.clock()
@@ -849,6 +904,8 @@ local function startTool()
   for k in pairs(cneed) do
     if not g_charOff[k] then error("Character field offset missing: " .. k) end
   end
+  local pOff = fieldOffsets(g_cls.Player, {BasePrimaryStat = 1})
+  g_charOff.BasePrimaryStat = pOff.BasePrimaryStat
 
   -- NOTE: SaveData instance scan is a full-memory AOB (1-3s) and usually
   -- finds nothing at the main menu -> deferred to the slow tick.
@@ -882,6 +939,10 @@ local function startTool()
     writeInteger(g_ctl + 44, 1)   -- [★19] no-CD: ON by default
   end
   g_tmpMem = allocateMemory(16)
+  g_buf = allocateMemory(64)
+  if g_buf then
+    for i = 0, 15 do writeInteger(g_buf + i * 4, 0) end
+  end
 
   registerAll()
   buildEntries()
