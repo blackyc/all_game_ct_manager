@@ -131,11 +131,24 @@ hash = h | 1                              ; 强制 bit0=1
 
 ## 六、已破解范围与未完成
 
-- ✅ ObscuredInt / ObscuredFloat:完整读写(CT 里 [★4] 移动速度 / [★5] 攻击速度)
+- ✅ ObscuredInt / ObscuredFloat:完整读写(CT 里 [★12] 移动速度 / [★14] 攻击速度)
 - ✅ ObscuredLong/Double(ACTkByte8):detour 已破解(见第三节),
-  BaseMaxHealth/BaseMaxMana/金币等 64 位字段可解密;写入时保留原 hash
-- ⬜ 8 字节版 hash 算法(定位 Long 字段时用,写入暂不需要)
+  BaseMaxHealth/BaseMaxMana 等 64 位字段可解密;写入时保留原 hash
+- ✅ **紧凑版 ObscuredInt(8 字节,无 hash/fake)** —— 本作金币钱包用的就是它:
+  `hidden@X, key@X+4`,detour 与 4 字节同款。定位法见第十一节
+- ⬜ 8 字节版 hash 算法(反汇编定位见下,写入暂不需要——游戏自己重算)
 - ⬜ ObscuredString:byte[] 引用型,另一套
+
+### 6.1 hash 例程的二进制定位法(通用)
+
+ACTk 的 hash 是 FNV 变体,乘数常数 `0x01000192` 以 `imul r32, imm32`
+(`69 C0 92 01 00 01`)形式出现在代码里——**扫这个立即数,10 处以内即是全部候选**,
+反汇编即可读出算法。4 字节版结构与本文第四节完全一致;8 字节候选例程是
+两条独立 4 字节链,尾声 `xor r8d, eax`(形式 `(FNV4(low)>>2) ^ ((FNV4(high)*P)|1)`),
+但与本作活体样本不符(可能属于别的 ACTk 类型),**故 8 字节 hash 仍未最终确认**。
+
+黑盒 sweep(500+ 常数/顺序/字节序组合)全灭后直接上反汇编才拿到确定信息——
+遇到"看起来是 FNV 但怎么试都不对"时,别继续猜,去扫常数立即数。
 
 ## 七、定位方法(通用流程,换游戏可复用)
 
@@ -249,3 +262,29 @@ end
    丢精度——64 位运算用两个 readInteger 拼 int64;脚本里严禁 busy-wait
 8. **找字段先枚举类定义**:`il2cpp_class_get_fields` 全程序集遍历,
    字段名(Gold/Cost/XP/CD...)常直接暴露答案,比盲扫快得多
+
+---
+
+## 十一、紧凑版 ObscuredInt —— 金币钱包定位法(可复用)
+
+本作金币不是 16 字节 ObscuredInt,也不是 ACTkByte8,而是**去掉 hash/fake 的
+8 字节紧凑变体**:`hidden@X, key@X+4`,detour `(h-k)^k mod 2^32`。
+它藏在**原始状态缓冲区**里(无 klass 头、±0x600 内找不到任何对象头),
+因此不能用类链解析。定位流程(全程在 CE 内完成):
+
+1. **制造多次变化**:全内存 unknown-initial-value 快照 → 每次购买后跑
+   `changed` → 静置 6s 跑 `unchanged`,重复 3 轮(幸存约 130 万)
+2. **绕过 16MB 传输上限**:桥的 `cmd_persistent_scan_get_results` 是**全局函数**,
+   `evaluate_lua` 里直接调用即可拿到结果表,不必经 JSON 管道
+3. **数学验证**:对每个候选地址,枚举
+   8 字节布局(hidden_low/hidden_high/struct_start)× i64/double/float32 解释
+   + 4 字节紧凑布局(int32_next/int32_prev),凡 `((h-k)^k) == 当前金币` 者即真身
+   ——随机数据 2^-64 概率误命中,**命中即真身,零误报**
+4. **写入**:`hidden = (新值 ^ key) + key`,key 保持不变(不动 key 免得游戏失配)
+
+配套的 JSON 锚点:内存里有解密后的存档 JSON 字符串(UTF-16 IL2CPP),
+特征 `{"Version":5`,内含 `"Gold":N`——它随金币实时更新,**可作重定位锚点**:
+解析 N 后在同堆区 ±2MB 扫解码相等的紧凑对,自校验重定位(CT v1.4.0 已采用)。
+
+注意:该 JSON 缓存是**序列化输出**,不是输入——直接改它会在下次存档时被
+活对象重新序列化的值覆盖(踩过)。
