@@ -18,7 +18,7 @@ local ENTRIES = {
   {t = "note",   d = "    自动定位失败时：把钱包地址(HEX)填进 [G3]（见解密笔记第十一节的定位流程）"},
   {t = "header", d = "────────── 金币 ──────────"},
   {t = "value",  d = "[G2] 当前金币", sym = SYM.GOLD, vt = vtDword},
-  {t = "value",  d = "[★20] 金币锁定（0=不锁定，>0=锁定此值）", sym = SYM.SET, vt = vtDword},
+  {t = "value",  d = "[★20] 金币锁定（默认 999999，0=不锁定）", sym = SYM.SET, vt = vtDword},
   {t = "value",  d = "[G3] 钱包地址HEX（可选·自动定位失败时手填，8字节）", sym = SYM.ADDR, vt = vtQword},
   {t = "header", d = "────────── 状态 ──────────"},
   {t = "value",  d = "[G0] 金币模块状态（2=就绪 3=定位中）", sym = SYM.CTL, vt = vtByte},
@@ -156,7 +156,10 @@ local function startGold()
   g_startedAt = os.clock()
   g_stopped = false
   g_ctl = allocateMemory(64)
-  if g_ctl then for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end end
+  if g_ctl then
+    for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
+    writeInteger(g_ctl + 4, 999999)   -- [★20] default gold lock value
+  end
   buildEntries()
   reg(SYM.CTL, g_ctl)
   reg(SYM.SET, g_ctl and g_ctl + 4)

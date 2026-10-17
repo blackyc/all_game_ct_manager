@@ -470,12 +470,12 @@ local ENTRIES = {
   {t = "note",   d = "    作者 YC      版本 v" .. VERSION .. "      适用 Deskrawl.exe（Unity IL2CPP） / CE 7.5+"},
   {t = "note",   d = "    用法：附加 Deskrawl.exe → 勾选最上面的 [★0]（进游戏读档后再勾更佳）"},
   {t = "note",   d = "    ② 「实时数据」直接读写内存，改动立即生效"},
-  {t = "note",   d = "    ③ 「存档数据」改动需回主菜单重新读档后生效"},
+  {t = "note",   d = "    ③ 「存档数据」显示 ?? 属正常：存档对象只在读档/存档瞬间存在，勾一次 [★21] 扫描存档即可读出"},
   {t = "note",   d = "    ④ 属性/战斗/金币类开关直接改写加密字段（已破解 ACTk 算法）；填 0 或取消勾选即还原"},
-  {t = "header", d = "────────── 实时数据 ──────────"},
+  {t = "header", d = "────────── 实时数据（[3] 金币需勾 [★G0] 金币模块）──────────"},
   {t = "value",  d = "[1] 当前生命", sym = SYM.HP, vt = vtDword},
   {t = "value",  d = "[2] 当前法力", sym = SYM.MANA, vt = vtDword},
-  {t = "header", d = "────────── 存档数据（重新读档后生效）──────────"},
+  {t = "header", d = "────────── 存档数据（显示 ?? 时勾 [★21] 扫描存档）──────────"},
   {t = "value",  d = "[4] 等级", sym = SYM.LEVEL, vt = vtDword},
   {t = "value",  d = "[5] 当前经验", sym = SYM.XP, vt = vtDword},
   {t = "value",  d = "[6] 最大生命（基础）", sym = SYM.MAXHP, vt = vtDword},
@@ -484,14 +484,14 @@ local ENTRIES = {
   {t = "value",  d = "[9] 主属性（智力/力量）", sym = SYM.PSTAT, vt = vtSingle},
   {t = "value",  d = "[10] 可用天赋点", sym = SYM.TALENT, vt = vtDword},
   {t = "header", d = "────────── 属性修改（立即生效）──────────"},
-  {t = "value",  d = "[★12] 移动速度设定（0=不修改）", sym = SYM.MSSET, vt = vtSingle},
+  {t = "value",  d = "[★12] 移动速度设定（默认 8，0=不修改）", sym = SYM.MSSET, vt = vtSingle},
   {t = "value",  d = "[13] 移动速度当前值", sym = SYM.MSSHOW, vt = vtSingle},
-  {t = "value",  d = "[★14] 攻击速度设定（0=不修改）", sym = SYM.ASSET, vt = vtSingle},
+  {t = "value",  d = "[★14] 攻击速度设定（默认 2，0=不修改）", sym = SYM.ASSET, vt = vtSingle},
   {t = "value",  d = "[15] 攻击速度当前值", sym = SYM.ASSHOW, vt = vtSingle},
   {t = "header", d = "────────── 战斗开关（进入战斗后勾选）──────────"},
   {t = "value",  d = "[★16] 锁血（1=开，0=关）", sym = SYM.GOD, vt = vtByte},
   {t = "value",  d = "[★17] MP 无限（1=开，0=关）", sym = SYM.MPI, vt = vtByte},
-  {t = "value",  d = "[★17s] MP 设定值（0=自动棘轮，>0=锁定此值）", sym = SYM.MPSET, vt = vtDword},
+  {t = "value",  d = "[★17s] MP 设定值（默认 100，0=自动棘轮）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
   {t = "value",  d = "[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）", sym = SYM.SAVESCAN, vt = vtByte},
@@ -852,6 +852,10 @@ local function startTool()
   -- may start non-zero and fire heavy work (gold sweep) on the very first tick.
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
+    -- sensible defaults so users can just tick the checkbox
+    writeFloat(g_ctl + 4, 8)     -- [★12] move speed setpoint
+    writeFloat(g_ctl + 8, 2)     -- [★14] attack speed setpoint
+    writeInteger(g_ctl + 40, 100) -- [★17s] MP lock value
   end
   g_tmpMem = allocateMemory(16)
 
