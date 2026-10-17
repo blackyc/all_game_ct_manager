@@ -540,9 +540,9 @@ local ENTRIES = {
   {t = "header", d = "────────── 角色数据 ──────────"},
   {t = "value",  d = "[4] 等级（实时）", sym = SYM.LEVEL, vt = vtDword},
   {t = "value",  d = "[5] 当前经验（存档对象瞬态，需勾 [★21]）", sym = SYM.XP, vt = vtDword},
-  {t = "value",  d = "[6] 最大生命（基础·实时）", sym = SYM.MAXHP, vt = vtDword},
-  {t = "value",  d = "[7] 基础伤害（实时）", sym = SYM.DMG, vt = vtDword},
-  {t = "value",  d = "[8] 最大法力（基础·实时）", sym = SYM.MAXMANA, vt = vtDword},
+  {t = "value",  d = "[6] 最大生命·基础值（面板上限=基础+装备加成）", sym = SYM.MAXHP, vt = vtDword},
+  {t = "value",  d = "[7] 基础伤害（未计装备加成）", sym = SYM.DMG, vt = vtDword},
+  {t = "value",  d = "[8] 最大法力·基础值", sym = SYM.MAXMANA, vt = vtDword},
   {t = "value",  d = "[9] 主属性（智力/力量·实时）", sym = SYM.PSTAT, vt = vtSingle},
   {t = "value",  d = "[10] 可用天赋点（存档对象瞬态，需勾 [★21]）", sym = SYM.TALENT, vt = vtDword},
   {t = "header", d = "────────── 属性修改（立即生效）──────────"},
@@ -1360,7 +1360,7 @@ if DeskrawlGold_Stop then DeskrawlGold_Stop() end
     </CheatEntry>
     <CheatEntry>
       <ID>901</ID>
-      <Description>"    作者 YC      版本 v1.6.0      适用 Deskrawl.exe 1.0.2a（Unity IL2CPP） / CE 7.5+"</Description>
+      <Description>"    作者 YC      版本 v1.6.1      适用 Deskrawl.exe 1.0.2a（Unity IL2CPP） / CE 7.5+"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>0</Address>
     </CheatEntry>
@@ -1440,19 +1440,19 @@ if DeskrawlGold_Stop then DeskrawlGold_Stop() end
     </CheatEntry>
     <CheatEntry>
       <ID>914</ID>
-      <Description>"[6] 最大生命（基础·实时）"</Description>
+      <Description>"[6] 最大生命·基础值（面板上限=基础+装备加成）"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXD_MAXHP</Address>
     </CheatEntry>
     <CheatEntry>
       <ID>915</ID>
-      <Description>"[7] 基础伤害（实时）"</Description>
+      <Description>"[7] 基础伤害（未计装备加成）"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXD_DMG</Address>
     </CheatEntry>
     <CheatEntry>
       <ID>916</ID>
-      <Description>"[8] 最大法力（基础·实时）"</Description>
+      <Description>"[8] 最大法力·基础值"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXD_MAXMANA</Address>
     </CheatEntry>
