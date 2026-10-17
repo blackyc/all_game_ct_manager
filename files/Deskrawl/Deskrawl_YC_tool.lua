@@ -29,13 +29,13 @@
 --     本脚本刻意不写这些字段，避免触发游戏的反作弊检测。
 -- =============================================================================
 
-local VERSION = "1.4.1"
+local VERSION = "1.5.0"
 local ENTRY_TAG = "FXD"
 local SYM = {GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE",
   SAVE2="FXD_SAVE2", CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
   LEVEL="FXD_LEVEL", XP="FXD_XP", MAXHP="FXD_MAXHP", DMG="FXD_DMG",
-  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT", GOLD="FXD_GOLD", GOLDSET="FXD_GOLDSET",
-  STASH="FXD_STASH", MSSET="FXD_MSSET", ASSET="FXD_ASSET",
+  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT",
+  MSSET="FXD_MSSET", ASSET="FXD_ASSET",
   MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
   GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD"}
 
@@ -56,17 +56,14 @@ local g_gm, g_pcc = nil, nil
 local g_hpOff, g_manaOff = nil, nil
 local g_pccOff, g_plOff = nil, nil   -- cached chain offsets
 local g_lastSaveScan = 0             -- throttle for save-instance rescans
-local g_lastStashScan = 0            -- throttle for stash rescans
+local g_startedAt = nil               -- tool start time (skip heavy scans early)
 local g_killList = {}                -- Enemy instances for one-hit-kill
 local g_lastKillScan = 0             -- throttle for enemy rescan
-local g_stash = nil                  -- authoritative SavedStash (SaveContainer.LocalStash)
 local g_charOff = {}                 -- Character field offsets (BaseMoveSpeed etc)
 local g_lastMs, g_lastAs = nil, nil  -- last applied setpoints
 local g_godHP, g_godMP = nil, nil    -- locked values for god/mp
 local g_godOn, g_mpOn, g_killOn = false, false, false
 local g_noCDOn = false                    -- no-CD toggle
-local g_goldAddr, g_goldKey = nil, nil   -- live wallet (compact ObscuredInt)
-local g_lastGoldScan = 0                 -- throttle for wallet re-resolve
 local g_fastTimer = nil               -- 60ms combat pin timer
 local g_tmpMem = nil                 -- scratch memory for float<->bits
 local g_tgtSnap = {}                 -- addr -> {t=TotalGameTime, c=os.clock()} for liveness
@@ -187,7 +184,50 @@ local function encObscuredInt(addr, value)
 end
 
 -- ---------------------------------------------------------------- class resolve
+-- class pointer cache: resolveClasses walks ~2000 classes with one remote
+-- call each (seconds). Class pointers are stable for a game process, so cache
+-- them on disk keyed by the GameAssembly base address.
+local function loadClassCache()
+  local path = os.getenv("TEMP") .. "\\deskrawl_yc_klass.txt"
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local line = f:read("*l")
+  f:close()
+  if not line then return nil end
+  local base, rest = line:match("^(%x+)%s+(.*)$")
+  if not base then return nil end
+  local modBase = getAddressSafe("GameAssembly.dll")
+  if not modBase or tonumber(base, 16) ~= modBase then return nil end
+  local map = {}
+  for k, v in rest:gmatch("(%w+)=(%x+)") do map[k] = tonumber(v, 16) end
+  -- spot-check: every cached pointer must still carry its class name
+  for name, ptr in pairs(map) do
+    if not ptr or ptr < 0x10000 then return nil end
+    if rds(rdq(ptr + 0x10), 48) ~= name then return nil end
+  end
+  return map
+end
+
+local function saveClassCache()
+  local path = os.getenv("TEMP") .. "\\deskrawl_yc_klass.txt"
+  local modBase = getAddressSafe("GameAssembly.dll")
+  if not modBase then return end
+  local parts = {}
+  for k, v in pairs(g_cls) do parts[#parts+1] = k .. "=" .. string.format("%X", v) end
+  local f = io.open(path, "w")
+  if f then
+    f:write(string.format("%X %s\n", modBase, table.concat(parts, " ")))
+    f:close()
+  end
+end
+
 local function resolveClasses()
+  local cached = loadClassCache()
+  if cached and cached.Player and cached.GameManager and cached.SaveData
+     and cached.Character and cached.PlayerCombatController and cached.Enemy then
+    g_cls = cached
+    return
+  end
   local fnDomain = getAddress("GameAssembly.il2cpp_domain_get")
   local fnAsms = getAddress("GameAssembly.il2cpp_domain_get_assemblies")
   local fnCnt = getAddress("GameAssembly.il2cpp_image_get_class_count")
@@ -219,7 +259,7 @@ local function resolveClasses()
   local cnt = executeCodeEx(0, 3000, fnCnt, acs)
   if not cnt or cnt == 0 then error("image_get_class_count failed") end
   local want = {SaveData=1, GameManager=1, PlayerCombatController=1, Player=1,
-    Character=1, SaveContainer=1, SavedStash=1, Enemy=1}
+    Character=1, Enemy=1}
   local found = {}
   for i = 0, cnt - 1 do
     local cls = executeCodeEx(0, 3000, fnClass, acs, i)
@@ -232,6 +272,7 @@ local function resolveClasses()
     if not found[k] then error("class not found in Assembly-CSharp: " .. k) end
   end
   g_cls = found
+  saveClassCache()
 end
 
 -- ---------------------------------------------------------------- field offsets
@@ -373,39 +414,6 @@ local function revalidateLive()
 end
 
 
--- authoritative stash: SaveContainer.LocalStash
-local function resolveStash()
-  local clsSC = g_cls.SaveContainer
-  if not clsSC then return nil end
-  -- LocalStash field offset
-  local so = fieldOffsets(clsSC, {LocalStash = 1})
-  local off = so.LocalStash
-  if not off or off == 0 then return nil end
-  local hx = string.format("%016X", clsSC)
-  local b = {}
-  for i = 8, 1, -1 do b[#b+1] = hx:sub(i * 2 - 1, i * 2) end
-  local sl = AOBScan(table.concat(b, " "), "+W-C")
-  local found = nil
-  if sl then
-    for i = 0, sl.Count - 1 do
-      local a = tonumber(sl[i], 16)
-      local sp = rdq(a + off)
-      if sp and sp > 0x10000 then
-        local k = rdq(sp + 0)
-        if k and k > 0x10000 then
-          local nm = rds(rdq(k + 0x10), 48)
-          if nm == "SavedStash" then
-            found = sp
-            break
-          end
-        end
-      end
-    end
-    sl.destroy()
-  end
-  return found
-end
-
 -- hp/mana offsets: plain-int heuristic inside Character tail region
 function resolveHpMana(save, player)
   local o = g_foff
@@ -432,81 +440,6 @@ function resolveHpMana(save, player)
     hpOff, manaOff = FB.hp, FB.mana
   end
   return hpOff, manaOff
-end
-
--- ------------------------------------------------- live gold wallet
--- The wallet lives inside a raw state buffer (no klass header). Resolved by
--- anchoring on the cached save JSON string ("{\"Version\":5, UTF-16) which
--- sits in the same heap region, parsing its "Gold":N value, then sweeping
--- nearby memory for a compact ObscuredInt pair whose
--- (hidden - key) XOR key == N. Self-validating: the decoded value must match.
-local function readUTF16Num(addr, maxChars)
-  -- read up to maxChars ASCII digits starting at addr; returns value, charCount
-  local digits, count = {}, 0
-  for i = 0, maxChars - 1 do
-    local v = rdi(addr + i * 2)
-    if not v or v < 48 or v > 57 then break end
-    digits[#digits+1] = v
-    count = count + 1
-  end
-  if count == 0 then return nil, 0 end
-  local num = 0
-  for i = 1, count do num = num * 10 + (digits[i] - 48) end
-  return num, count
-end
-
-local function resolveGoldWallet()
-  local gsl = AOBScan([[22 00 47 00 6F 00 6C 00 64 00 22 00 3A 00]], "+W-C")
-  if not gsl or gsl.Count == 0 then return nil end
-  local goldTag = tonumber(gsl[0], 16)
-  gsl.destroy()
-  -- digits live 7 chars after the opening quote: "Gold":
-  local jsonGold = readUTF16Num(goldTag + 7 * 2, 12)
-  if not jsonGold then return nil end
-  -- anchor: JSON string start marker, sweep from there in 128KB chunks
-  local jsl = AOBScan([[7B 00 22 00 56 00 65 00 72 00 73 00 69 00 6F 00 6E 00 22 00 3A 00 35 00]], "+W-C")
-  local anchor = goldTag
-  if jsl and jsl.Count > 0 then anchor = tonumber(jsl[0], 16) jsl.destroy() end
-  if jsonGold < 0 or jsonGold > 1000000000 then return nil end
-  -- chunked sweep: one readBytes per 128KB (a multi-MB Lua table would cost
-  -- hundreds of MB of RAM and stall CE), outward from the JSON anchor
-  local CHUNK = 0x20000
-  local RANGE = 0x4000000
-  for _, dir in ipairs({ 1, -1 }) do
-    local startOff = 0
-    while startOff < RANGE do
-      local base = anchor + dir * startOff
-      if base < 0x10000 then break end
-      local buf = readBytes(base, CHUNK, true)
-      if buf and #buf >= 8 then
-        local n = #buf - 8
-        for i = 1, n, 4 do
-          local h = buf[i] + buf[i+1] * 0x100 + buf[i+2] * 0x10000 + buf[i+3] * 0x1000000
-          local k = buf[i+4] + buf[i+5] * 0x100 + buf[i+6] * 0x10000 + buf[i+7] * 0x1000000
-          if k ~= 0 and k > 16 then
-            local v = ((h - k) % 0x100000000) ~ k
-            if v == jsonGold then
-              return base + i - 1, k, v
-            end
-          end
-        end
-      end
-      startOff = startOff + CHUNK
-    end
-  end
-  return nil
-end
-
-local function goldDecode(addr)
-  if not addr then return nil end
-  local h = rdi(addr)
-  local k = rdi(addr + 4)
-  if not h or not k then return nil end
-  return ((h - k) % 0x100000000) ~ k
-end
-
-local function goldEncode(addr, key, value)
-  writeInteger(addr, ((value ~ key) + key) % 0x100000000)
 end
 
 -- scan all live Enemy instances (klass header match + sane HP) for one-hit-kill
@@ -542,7 +475,6 @@ local ENTRIES = {
   {t = "header", d = "────────── 实时数据 ──────────"},
   {t = "value",  d = "[1] 当前生命", sym = SYM.HP, vt = vtDword},
   {t = "value",  d = "[2] 当前法力", sym = SYM.MANA, vt = vtDword},
-  {t = "value",  d = "[3] 当前金币", sym = SYM.GOLD, vt = vtDword},
   {t = "header", d = "────────── 存档数据（重新读档后生效）──────────"},
   {t = "value",  d = "[4] 等级", sym = SYM.LEVEL, vt = vtDword},
   {t = "value",  d = "[5] 当前经验", sym = SYM.XP, vt = vtDword},
@@ -562,8 +494,6 @@ local ENTRIES = {
   {t = "value",  d = "[★17s] MP 设定值（0=自动棘轮，>0=锁定此值）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
-  {t = "header", d = "────────── 金币 ──────────"},
-  {t = "value",  d = "[★20] 金币锁定（0=不锁定，>0=锁定此值）", sym = SYM.GOLDSET, vt = vtDword},
   {t = "header", d = "────────── 脚本状态 ──────────"},
   {t = "value",  d = "[★0] 启动 / 重新定位（1=运行）", sym = SYM.CTL, vt = vtByte},
 }
@@ -613,13 +543,6 @@ function registerAll()
   reg(SYM.SAVE, g_save)
   reg(SYM.SAVE2, g_save2)
   reg(SYM.CTL, g_ctl)
-  reg(SYM.STASH, g_stash)
-  if g_stash and g_foff then
-    -- gold is a plain int at SavedStash+0x20 (offset resolved at runtime below)
-    reg(SYM.GOLD, g_stash + (g_stashGoldOff or 0x20))
-  else
-    unreg(SYM.GOLD)
-  end
   if g_ctl then
     reg(SYM.MSSET, g_ctl + 4)
     reg(SYM.ASSET, g_ctl + 8)
@@ -629,13 +552,11 @@ function registerAll()
     reg(SYM.MPI, g_ctl + 32)
     reg(SYM.KILL, g_ctl + 36)
     reg(SYM.MPSET, g_ctl + 40)
-    reg(SYM.GOLDSET, g_ctl + 48)
     reg(SYM.NOCD, g_ctl + 44)
   end
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
   if g_player and g_manaOff then reg(SYM.MANA, g_player + g_manaOff) else unreg(SYM.MANA) end
-  if g_goldAddr then reg(SYM.GOLD, g_goldAddr) else unreg(SYM.GOLD) end
   if g_save and o.Level then reg(SYM.LEVEL, g_save + o.Level) else unreg(SYM.LEVEL) end
   if g_save and o.CurrentXP then reg(SYM.XP, g_save + o.CurrentXP) else unreg(SYM.XP) end
   if g_save and o.BaseMaxHealth then reg(SYM.MAXHP, g_save + o.BaseMaxHealth) else unreg(SYM.MAXHP) end
@@ -643,7 +564,6 @@ function registerAll()
   if g_save and o.BaseMaxMana then reg(SYM.MAXMANA, g_save + o.BaseMaxMana) else unreg(SYM.MAXMANA) end
   if g_save and o.BasePrimaryStat then reg(SYM.PSTAT, g_save + o.BasePrimaryStat) else unreg(SYM.PSTAT) end
   if g_save and o.TalentOutstandingPoints then reg(SYM.TALENT, g_save + o.TalentOutstandingPoints) else unreg(SYM.TALENT) end
-  if g_save and o.TotalEarnedGold then reg(SYM.GOLD, g_save + o.TotalEarnedGold) else unreg(SYM.GOLD) end
 end
 
 -- ---------------------------------------------------------------- tick
@@ -805,15 +725,14 @@ local function tick()
     end
   end
 
-  -- gold wallet: one-shot resolve when a setpoint first becomes active.
-  -- Heavy (AOB + sweep) so it must NEVER run on the startup tick path or on
-  -- every slow tick: guard on 0 -> >0 transition and a long cooldown.
-  local goldSetNow = rdi(g_ctl + 48) or 0
-  if goldSetNow > 0 and not g_goldAddr and os.clock() - g_lastGoldScan > 60 then
-    g_lastGoldScan = os.clock()
-    local okG, a, k = pcall(resolveGoldWallet)
-    if okG and a then
-      g_goldAddr, g_goldKey = a, k
+  -- SaveData instances: full-memory AOB, keep OFF the startup path and rare
+  if (not g_save or rdq(g_save + 0) ~= g_cls.SaveData)
+     and g_startedAt and (os.clock() - g_startedAt > 10)
+     and os.clock() - g_lastSaveScan > 30 then
+    g_lastSaveScan = os.clock()
+    local list = findSaveInstances()
+    if list[1] then
+      g_save, g_save2 = list[1], list[2]
       registerAll()
     end
   end
@@ -825,93 +744,6 @@ local function tick()
     if okK and list then g_killList = list end
   end
 
-  -- stash refresh (throttled independently)
-  if (not g_stash or rdq(g_stash + 0) == 0) and os.clock() - g_lastStashScan > 5 then
-    g_lastStashScan = os.clock()
-    local okS, st = pcall(resolveStash)
-    if okS and st and st > 0x10000 then
-      g_stash = st
-      reg(SYM.STASH, g_stash)
-      reg(SYM.GOLD, g_stash + (g_stashGoldOff or 0x20))
-    end
-  end
-  if g_ctl then writeBytes(g_ctl, status) end
-end
-
--- ---------------------------------------------------------------- start/stop
--- NOTE: must stay LOCAL. A global stopper gets overwritten by the next CT
--- load, so old instances' auto-stop would kill the NEW instance instead of
--- themselves (seen live: zombies deleting fresh entries every second).
-local function stopTool()
-  g_stopped = true
-  if g_timer then
-    local t = g_timer
-    g_timer = nil
-    t.destroy()
-  end
-  if g_fastTimer then
-    local t = g_fastTimer
-    g_fastTimer = nil
-    t.destroy()
-  end
-  deleteOwnEntries()
-  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
-  if g_ctl then pcall(deAllocMemory, g_ctl) g_ctl = nil end
-  g_save, g_save2, g_player, g_gm, g_pcc = nil, nil, nil, nil, nil
-  g_stash = nil
-  g_lastMs, g_lastAs = nil, nil
-  g_godHP, g_godMP = nil, nil
-  g_godOn, g_mpOn, g_killOn, g_noCDOn = false, false, false, false
-  -- revert modified base stats on stop (一键还原)
-  pcall(function()
-    local player = g_player
-    if not player then return end
-    if _G.FXD_ORIG_MS and g_charOff.BaseMoveSpeed then
-      encObscuredFloat(player + g_charOff.BaseMoveSpeed, _G.FXD_ORIG_MS)
-    end
-    if _G.FXD_ORIG_AS and g_charOff.BaseAttackSpeed then
-      encObscuredFloat(player + g_charOff.BaseAttackSpeed, _G.FXD_ORIG_AS)
-    end
-    _G.FXD_ORIG_MS, _G.FXD_ORIG_AS = nil, nil
-    _G.FXD_LASTMS, _G.FXD_LASTAS = nil, nil
-  end)
-  g_tgtSnap = {}
-  g_savePicked = false
-  log("stopped, entries removed")
-end
-
-local function startTool()
-  -- stop leftovers from any previous load of this tool
-  for _, fn in ipairs(_G.FXD_STOP_ALL) do pcall(fn) end
-  _G.FXD_STOP_ALL = {}
-  if g_timer or g_fastTimer then return end  -- already running
-  g_stopped = false
-  g_fails = 0
-  g_pid = getOpenedProcessID()
-  if not g_pid or g_pid == 0 then error("no process attached") end
-
-  -- clean leftovers from a previous run
-  deleteOwnEntries()
-  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
-
-  resolveClasses()
-
-  -- SaveData field offsets (all resolved by name, no hardcoding)
-  local need = {"Level", "CurrentXP", "BaseMaxHealth", "BaseDamage", "CurrentHP",
-    "BaseMaxMana", "CurrentMana", "BasePrimaryStat", "TalentOutstandingPoints",
-    "TotalEarnedGold", "TotalGameTime"}
-  local want = {}
-  for _, k in ipairs(need) do want[k] = 1 end
-  g_foff = fieldOffsets(g_cls.SaveData, want)
-  for _, k in ipairs(need) do
-    if not g_foff[k] then error("SaveData field offset missing: " .. k) end
-  end
-
-  -- SavedStash.Gold offset (runtime-resolved)
-  local gneed = {Gold = 1}
-  local goff = fieldOffsets(g_cls.SavedStash, gneed)
-  g_stashGoldOff = goff.Gold
-
   -- Character field offsets (encrypted base stats)
   local cneed = {BaseMoveSpeed = 1, BaseAttackSpeed = 1}
   g_charOff = fieldOffsets(g_cls.Character, cneed)
@@ -919,10 +751,8 @@ local function startTool()
     if not g_charOff[k] then error("Character field offset missing: " .. k) end
   end
 
-  -- save instances (soft: may not exist at main menu)
-  local list = findSaveInstances()
-  g_save = list[1]
-  g_save2 = list[2]
+  -- NOTE: SaveData instance scan is a full-memory AOB (1-3s) and usually
+  -- finds nothing at the main menu -> deferred to the slow tick.
 
   -- live chain (soft: may not exist at main menu)
   local okLive, gm, pcc, player = pcall(resolveLive)
@@ -930,11 +760,6 @@ local function startTool()
     g_gm, g_pcc, g_player = gm, pcc, player
   end
 
-  -- authoritative stash (soft)
-  local okStash, stash = pcall(resolveStash)
-  if okStash and stash and stash > 0x10000 then
-    g_stash = stash
-  end
 
   -- hp/mana offsets
   if g_save and g_player then
@@ -947,8 +772,8 @@ local function startTool()
   --                god@28 mpi@32 kill@36
   g_ctl = allocateMemory(64)
   -- allocateMemory returns DIRTY memory: zero the WHOLE block, otherwise the
-  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44 goldset@48)
-  -- may start non-zero and fire heavy work (gold sweep) on the very first tick.
+  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44)
+  -- may start non-zero and fire heavy work on the very first tick.
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
   end
@@ -980,18 +805,8 @@ local function startTool()
   g_fastTimer.OnTimer = function()
     if g_stopped then return end
     if getOpenedProcessID() ~= g_pid then return end
-    if not (g_godOn or g_mpOn or g_killOn or g_noCDOn) then
-      local gs = g_ctl and (rdi(g_ctl + 48) or 0) or 0
-      if not (gs > 0) then return end
-    end
+    if not (g_godOn or g_mpOn or g_killOn or g_noCDOn) then return end
     -- no-CD: zero GCD + skill CD + state timer (works even without player pin)
-    -- gold lock: keep wallet at the setpoint (compact ObscuredInt re-encrypt)
-    local goldSet = g_ctl and (rdi(g_ctl + 48) or 0) or 0
-    if goldSet > 0 then
-      if g_goldAddr and goldDecode(g_goldAddr) ~= goldSet then
-        pcall(goldEncode, g_goldAddr, g_goldKey, goldSet)
-      end
-    end
     if g_noCDOn and g_pcc and rdq(g_pcc + 0) == g_cls.PlayerCombatController then
       local pac = rdq(g_pcc + 0x70)
       if pac and pac > 0x10000 then
