@@ -10,14 +10,16 @@
 --       本模块独立于主 CT, 不加载它就不会有任何扫描开销。
 
 local VERSION = "1.0.0"
-local SYM = { CTL = "FXDG_CTL", SET = "FXDG_SET", GOLD = "FXDG_GOLD" }
+local SYM = { CTL = "FXDG_CTL", SET = "FXDG_SET", GOLD = "FXDG_GOLD", ADDR = "FXDG_ADDR" }
 local ENTRIES = {
   {t = "header", d = "═══ 挂机破坏神 —— 金币模块 ═══"},
   {t = "note",   d = "    作者 YC      版本 v" .. VERSION .. "      需先加载 Deskrawl_YC.CT 并已进游戏读档"},
   {t = "note",   d = "    勾选 [★G0] 启动 -> 填 [★20] 金币锁定 -> 填 0 还原"},
+  {t = "note",   d = "    自动定位失败时：把钱包地址(HEX)填进 [G3]（见解密笔记第十一节的定位流程）"},
   {t = "header", d = "────────── 金币 ──────────"},
   {t = "value",  d = "[G2] 当前金币", sym = SYM.GOLD, vt = vtDword},
   {t = "value",  d = "[★20] 金币锁定（0=不锁定，>0=锁定此值）", sym = SYM.SET, vt = vtDword},
+  {t = "value",  d = "[G3] 钱包地址HEX（可选·自动定位失败时手填，8字节）", sym = SYM.ADDR, vt = vtQword},
   {t = "header", d = "────────── 状态 ──────────"},
   {t = "value",  d = "[G0] 金币模块状态（2=就绪 3=定位中）", sym = SYM.CTL, vt = vtByte},
 }
@@ -81,14 +83,22 @@ end
 local function resolveWallet()
   local gsl = AOBScan([[22 00 47 00 6F 00 6C 00 64 00 22 00 3A 00]], "+W-C")
   if not gsl or gsl.Count == 0 then return nil end
-  local goldTag = tonumber(gsl[0], 16)
+  -- several "Gold": occurrences may exist; take the first that parses as a number
+  local jsonGold = nil
+  for i = 0, math.min(gsl.Count - 1, 7) do
+    local a = tonumber(gsl[i], 16)
+    if a then
+      local v = readUTF16Num(a + 7 * 2, 12)
+      if v and v >= 0 and v <= 1000000000 then jsonGold = v break end
+    end
+  end
   gsl.destroy()
-  local jsonGold = readUTF16Num(goldTag + 7 * 2, 12)
-  if not jsonGold or jsonGold < 0 or jsonGold > 1000000000 then return nil end
+  if not jsonGold then return nil end
   local jsl = AOBScan([[7B 00 22 00 56 00 65 00 72 00 73 00 69 00 6F 00 6E 00 22 00 3A 00 35 00]], "+W-C")
-  local anchor = goldTag
-  if jsl and jsl.Count > 0 then anchor = tonumber(jsl[0], 16) jsl.destroy() end
-  local CHUNK, RANGE = 0x20000, 0x4000000
+  if jsl and jsl.Count > 0 then anchor = tonumber(jsl[0], 16) end
+  if jsl then jsl.destroy() end
+  if not anchor then return nil end
+  local CHUNK, RANGE = 0x40000, 0x10000000   -- 256KB chunks, +/-256MB
   for _, dir in ipairs({ 1, -1 }) do
     local off = 0
     while off < RANGE do
@@ -150,6 +160,7 @@ local function startGold()
   buildEntries()
   reg(SYM.CTL, g_ctl)
   reg(SYM.SET, g_ctl and g_ctl + 4)
+  reg(SYM.ADDR, g_ctl and g_ctl + 8)
   local t = createTimer(nil, false)
   t.Interval = 60
   t.OnTimer = function()
@@ -158,17 +169,41 @@ local function startGold()
     if not g_ctl then return end
     writeInteger(g_ctl, 2)          -- ctl+0 = status (script writes)
     local set = rdi(g_ctl + 4) or 0 -- ctl+4 = user setpoint
-    -- one-shot resolve on 0 -> >0 transition, at most every 60s
-    if set > 0 and not g_goldAddr and os.clock() - g_lastScan > 60 then
+    -- manual override: if [G3] holds an address, use it directly
+    local manual = rdi(g_ctl + 8) or 0
+    manual = manual + ((rdi(g_ctl + 12) or 0) * 0x100000000)
+    if manual > 0x10000 then
+      local d = goldDecode(manual)
+      if d and d >= 0 and d < 1000000000 then
+        if g_goldAddr ~= manual then
+          g_goldAddr, g_goldKey = manual, rdi(manual + 4)
+          reg(SYM.GOLD, manual)
+          log("manual wallet address " .. string.format("%X", manual) .. " gold=" .. tostring(d))
+        end
+      end
+    end
+    -- resolve with retries: the JSON anchor is a TRANSIENT string and the
+    -- memory scan itself takes ~15 s on a 16 GB process, so a hit can go
+    -- stale before we even read it. Keep retrying; eventually one attempt
+    -- lands inside a fresh window.
+    if set > 0 and not g_goldAddr and (g_attempts or 0) < 3
+       and os.clock() - g_lastScan > 45 then
       g_lastScan = os.clock()
+      g_attempts = (g_attempts or 0) + 1
       writeInteger(g_ctl, 3)
       local okR, a, k = pcall(resolveWallet)
       if okR and a then
         g_goldAddr, g_goldKey = a, k
         reg(SYM.GOLD, g_goldAddr)
-        log("wallet resolved at " .. string.format("%X", g_goldAddr) .. " key=" .. string.format("%016X", k))
+        log("wallet resolved at " .. string.format("%X", g_goldAddr)
+            .. " key=" .. string.format("%016X", k) .. " (attempt " .. g_attempts .. ")")
       else
-        log("wallet not found (retry in 60s)")
+        if g_attempts >= 3 then
+          log("auto-locate gave up after 3 attempts (each costs a ~15 s memory scan). "
+              .. "Put the wallet address into [G3] instead - see section 11 of the ACTk notes.")
+        else
+          log("resolve attempt " .. g_attempts .. " failed (JSON anchor went stale?), retrying in 45s")
+        end
       end
       writeInteger(g_ctl, 2)
     end

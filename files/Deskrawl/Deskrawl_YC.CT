@@ -45,7 +45,7 @@ local SYM = {GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE",
   SAVE2="FXD_SAVE2", CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
   LEVEL="FXD_LEVEL", XP="FXD_XP", MAXHP="FXD_MAXHP", DMG="FXD_DMG",
   MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT",
-  MSSET="FXD_MSSET", ASSET="FXD_ASSET",
+
   MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
   GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD"}
 
@@ -504,6 +504,7 @@ local ENTRIES = {
   {t = "value",  d = "[★17s] MP 设定值（0=自动棘轮，&gt;0=锁定此值）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
+  {t = "value",  d = "[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）", sym = SYM.SAVESCAN, vt = vtByte},
   {t = "header", d = "────────── 脚本状态 ──────────"},
   {t = "value",  d = "[★0] 启动 / 重新定位（1=运行）", sym = SYM.CTL, vt = vtByte},
 }
@@ -563,6 +564,7 @@ function registerAll()
     reg(SYM.KILL, g_ctl + 36)
     reg(SYM.MPSET, g_ctl + 40)
     reg(SYM.NOCD, g_ctl + 44)
+    reg(SYM.SAVESCAN, g_ctl + 52)
   end
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
@@ -616,10 +618,12 @@ local function tick()
       status = 3
     end
   end
-  -- validate save (scan throttled: at most once per 5 s)
+  -- validate save: NEVER auto-scan (full-memory AOB = ~15 s on a 16 GB
+  -- process and it would stall CE every few seconds). Rescanning happens
+  -- only when the user ticks [★21] 扫描存档 (handled further below).
   local okSave = g_save and validSave(g_save)
   if not okSave then
-    if os.clock() - g_lastSaveScan &gt; 5 then
+    if (rdi(g_ctl + 52) or 0) == 1 and os.clock() - g_lastSaveScan &gt; 5 then
       g_lastSaveScan = os.clock()
       local list = findSaveInstances()
       if list[1] then
@@ -735,11 +739,12 @@ local function tick()
     end
   end
 
-  -- SaveData instances: full-memory AOB, keep OFF the startup path and rare
-  if (not g_save or rdq(g_save + 0) ~= g_cls.SaveData)
-     and g_startedAt and (os.clock() - g_startedAt &gt; 10)
-     and os.clock() - g_lastSaveScan &gt; 30 then
+  -- SaveData instances: FULL-MEMORY AOB (seconds on a 16GB process) -&gt;
+  -- user-triggered only via [★21] 扫描存档 (ctl+52), then auto-off.
+  local wantSave = rdi(g_ctl + 52) or 0
+  if wantSave == 1 and os.clock() - g_lastSaveScan &gt; 5 then
     g_lastSaveScan = os.clock()
+    writeInteger(g_ctl + 52, 0)
     local list = findSaveInstances()
     if list[1] then
       g_save, g_save2 = list[1], list[2]
@@ -748,10 +753,82 @@ local function tick()
   end
 
   -- one-hit-kill: throttled full-enemy rescan while enabled
-  if g_killOn and os.clock() - g_lastKillScan &gt; 2 then
+  if g_killOn and os.clock() - g_lastKillScan &gt; 30 then
     g_lastKillScan = os.clock()
     local okK, list = pcall(refreshKillList)
     if okK and list then g_killList = list end
+  end
+
+  if g_ctl then writeBytes(g_ctl, status) end
+end
+
+-- ---------------------------------------------------------------- start/stop
+-- NOTE: must stay LOCAL. A global stopper gets overwritten by the next CT
+-- load, so old instances' auto-stop would kill the NEW instance instead of
+-- themselves (seen live: zombies deleting fresh entries every second).
+local function stopTool()
+  g_stopped = true
+  if g_timer then
+    local t = g_timer
+    g_timer = nil
+    t.destroy()
+  end
+  if g_fastTimer then
+    local t = g_fastTimer
+    g_fastTimer = nil
+    t.destroy()
+  end
+  deleteOwnEntries()
+  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
+  if g_ctl then pcall(deAllocMemory, g_ctl) g_ctl = nil end
+  g_save, g_save2, g_player, g_gm, g_pcc = nil, nil, nil, nil, nil
+  g_lastMs, g_lastAs = nil, nil
+  g_godHP, g_godMP = nil, nil
+  g_godOn, g_mpOn, g_killOn, g_noCDOn = false, false, false, false
+  -- revert modified base stats on stop (一键还原)
+  pcall(function()
+    local player = g_player
+    if not player then return end
+    if _G.FXD_ORIG_MS and g_charOff.BaseMoveSpeed then
+      encObscuredFloat(player + g_charOff.BaseMoveSpeed, _G.FXD_ORIG_MS)
+    end
+    if _G.FXD_ORIG_AS and g_charOff.BaseAttackSpeed then
+      encObscuredFloat(player + g_charOff.BaseAttackSpeed, _G.FXD_ORIG_AS)
+    end
+    _G.FXD_ORIG_MS, _G.FXD_ORIG_AS = nil, nil
+    _G.FXD_LASTMS, _G.FXD_LASTAS = nil, nil
+  end)
+  g_tgtSnap = {}
+  g_savePicked = false
+  log("stopped, entries removed")
+end
+
+local function startTool()
+  -- stop leftovers from any previous load of this tool
+  for _, fn in ipairs(_G.FXD_STOP_ALL) do pcall(fn) end
+  _G.FXD_STOP_ALL = {}
+  if g_timer or g_fastTimer then return end  -- already running
+  g_stopped = false
+  g_fails = 0
+  g_pid = getOpenedProcessID()
+  g_startedAt = os.clock()
+  if not g_pid or g_pid == 0 then error("no process attached") end
+
+  -- clean leftovers from a previous run
+  deleteOwnEntries()
+  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
+
+  resolveClasses()
+
+  -- SaveData field offsets (all resolved by name, no hardcoding)
+  local need = {"Level", "CurrentXP", "BaseMaxHealth", "BaseDamage", "CurrentHP",
+    "BaseMaxMana", "CurrentMana", "BasePrimaryStat", "TalentOutstandingPoints",
+    "TotalEarnedGold", "TotalGameTime"}
+  local want = {}
+  for _, k in ipairs(need) do want[k] = 1 end
+  g_foff = fieldOffsets(g_cls.SaveData, want)
+  for _, k in ipairs(need) do
+    if not g_foff[k] then error("SaveData field offset missing: " .. k) end
   end
 
   -- Character field offsets (encrypted base stats)
@@ -770,7 +847,6 @@ local function tick()
     g_gm, g_pcc, g_player = gm, pcc, player
   end
 
-
   -- hp/mana offsets
   if g_save and g_player then
     g_hpOff, g_manaOff = resolveHpMana(g_save, g_player)
@@ -782,8 +858,8 @@ local function tick()
   --                god@28 mpi@32 kill@36
   g_ctl = allocateMemory(64)
   -- allocateMemory returns DIRTY memory: zero the WHOLE block, otherwise the
-  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44)
-  -- may start non-zero and fire heavy work on the very first tick.
+  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44 save@52)
+  -- may start non-zero and fire heavy work (gold sweep) on the very first tick.
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
   end
@@ -935,14 +1011,16 @@ if syntaxcheck then return end
 --       本模块独立于主 CT, 不加载它就不会有任何扫描开销。
 
 local VERSION = "1.0.0"
-local SYM = { CTL = "FXDG_CTL", SET = "FXDG_SET", GOLD = "FXDG_GOLD" }
+local SYM = { CTL = "FXDG_CTL", SET = "FXDG_SET", GOLD = "FXDG_GOLD", ADDR = "FXDG_ADDR" }
 local ENTRIES = {
   {t = "header", d = "═══ 挂机破坏神 —— 金币模块 ═══"},
   {t = "note",   d = "    作者 YC      版本 v" .. VERSION .. "      需先加载 Deskrawl_YC.CT 并已进游戏读档"},
   {t = "note",   d = "    勾选 [★G0] 启动 -&gt; 填 [★20] 金币锁定 -&gt; 填 0 还原"},
+  {t = "note",   d = "    自动定位失败时：把钱包地址(HEX)填进 [G3]（见解密笔记第十一节的定位流程）"},
   {t = "header", d = "────────── 金币 ──────────"},
   {t = "value",  d = "[G2] 当前金币", sym = SYM.GOLD, vt = vtDword},
   {t = "value",  d = "[★20] 金币锁定（0=不锁定，&gt;0=锁定此值）", sym = SYM.SET, vt = vtDword},
+  {t = "value",  d = "[G3] 钱包地址HEX（可选·自动定位失败时手填，8字节）", sym = SYM.ADDR, vt = vtQword},
   {t = "header", d = "────────── 状态 ──────────"},
   {t = "value",  d = "[G0] 金币模块状态（2=就绪 3=定位中）", sym = SYM.CTL, vt = vtByte},
 }
@@ -1006,14 +1084,22 @@ end
 local function resolveWallet()
   local gsl = AOBScan([[22 00 47 00 6F 00 6C 00 64 00 22 00 3A 00]], "+W-C")
   if not gsl or gsl.Count == 0 then return nil end
-  local goldTag = tonumber(gsl[0], 16)
+  -- several "Gold": occurrences may exist; take the first that parses as a number
+  local jsonGold = nil
+  for i = 0, math.min(gsl.Count - 1, 7) do
+    local a = tonumber(gsl[i], 16)
+    if a then
+      local v = readUTF16Num(a + 7 * 2, 12)
+      if v and v &gt;= 0 and v &lt;= 1000000000 then jsonGold = v break end
+    end
+  end
   gsl.destroy()
-  local jsonGold = readUTF16Num(goldTag + 7 * 2, 12)
-  if not jsonGold or jsonGold &lt; 0 or jsonGold &gt; 1000000000 then return nil end
+  if not jsonGold then return nil end
   local jsl = AOBScan([[7B 00 22 00 56 00 65 00 72 00 73 00 69 00 6F 00 6E 00 22 00 3A 00 35 00]], "+W-C")
-  local anchor = goldTag
-  if jsl and jsl.Count &gt; 0 then anchor = tonumber(jsl[0], 16) jsl.destroy() end
-  local CHUNK, RANGE = 0x20000, 0x4000000
+  if jsl and jsl.Count &gt; 0 then anchor = tonumber(jsl[0], 16) end
+  if jsl then jsl.destroy() end
+  if not anchor then return nil end
+  local CHUNK, RANGE = 0x40000, 0x10000000   -- 256KB chunks, +/-256MB
   for _, dir in ipairs({ 1, -1 }) do
     local off = 0
     while off &lt; RANGE do
@@ -1075,6 +1161,7 @@ local function startGold()
   buildEntries()
   reg(SYM.CTL, g_ctl)
   reg(SYM.SET, g_ctl and g_ctl + 4)
+  reg(SYM.ADDR, g_ctl and g_ctl + 8)
   local t = createTimer(nil, false)
   t.Interval = 60
   t.OnTimer = function()
@@ -1083,17 +1170,41 @@ local function startGold()
     if not g_ctl then return end
     writeInteger(g_ctl, 2)          -- ctl+0 = status (script writes)
     local set = rdi(g_ctl + 4) or 0 -- ctl+4 = user setpoint
-    -- one-shot resolve on 0 -&gt; &gt;0 transition, at most every 60s
-    if set &gt; 0 and not g_goldAddr and os.clock() - g_lastScan &gt; 60 then
+    -- manual override: if [G3] holds an address, use it directly
+    local manual = rdi(g_ctl + 8) or 0
+    manual = manual + ((rdi(g_ctl + 12) or 0) * 0x100000000)
+    if manual &gt; 0x10000 then
+      local d = goldDecode(manual)
+      if d and d &gt;= 0 and d &lt; 1000000000 then
+        if g_goldAddr ~= manual then
+          g_goldAddr, g_goldKey = manual, rdi(manual + 4)
+          reg(SYM.GOLD, manual)
+          log("manual wallet address " .. string.format("%X", manual) .. " gold=" .. tostring(d))
+        end
+      end
+    end
+    -- resolve with retries: the JSON anchor is a TRANSIENT string and the
+    -- memory scan itself takes ~15 s on a 16 GB process, so a hit can go
+    -- stale before we even read it. Keep retrying; eventually one attempt
+    -- lands inside a fresh window.
+    if set &gt; 0 and not g_goldAddr and (g_attempts or 0) &lt; 3
+       and os.clock() - g_lastScan &gt; 45 then
       g_lastScan = os.clock()
+      g_attempts = (g_attempts or 0) + 1
       writeInteger(g_ctl, 3)
       local okR, a, k = pcall(resolveWallet)
       if okR and a then
         g_goldAddr, g_goldKey = a, k
         reg(SYM.GOLD, g_goldAddr)
-        log("wallet resolved at " .. string.format("%X", g_goldAddr) .. " key=" .. string.format("%016X", k))
+        log("wallet resolved at " .. string.format("%X", g_goldAddr)
+            .. " key=" .. string.format("%016X", k) .. " (attempt " .. g_attempts .. ")")
       else
-        log("wallet not found (retry in 60s)")
+        if g_attempts &gt;= 3 then
+          log("auto-locate gave up after 3 attempts (each costs a ~15 s memory scan). "
+              .. "Put the wallet address into [G3] instead - see section 11 of the ACTk notes.")
+        else
+          log("resolve attempt " .. g_attempts .. " failed (JSON anchor went stale?), retrying in 45s")
+        end
       end
       writeInteger(g_ctl, 2)
     end
@@ -1329,51 +1440,63 @@ if DeskrawlGold_Stop then DeskrawlGold_Stop() end
     </CheatEntry>
     <CheatEntry>
       <ID>929</ID>
+      <Description>"[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）"</Description>
+      <VariableType>Byte</VariableType>
+      <Address>FXD_SAVESCAN</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>930</ID>
       <Description>"────────── 金币 ──────────"</Description>
       <GroupHeader>1</GroupHeader>
       <VariableType>4 Bytes</VariableType>
       <Address>0</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>930</ID>
+      <ID>931</ID>
       <Description>"[★20] 金币锁定（0=不锁定，&gt;0=锁定此值）"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXD_GOLDSET</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>931</ID>
+      <ID>932</ID>
       <Description>"────────── 金币（需勾选 [★G0] 金币模块）──────────"</Description>
       <GroupHeader>1</GroupHeader>
       <VariableType>4 Bytes</VariableType>
       <Address>0</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>932</ID>
+      <ID>933</ID>
       <Description>"[G2] 当前金币"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXDG_GOLD</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>933</ID>
+      <ID>934</ID>
       <Description>"[★20] 金币锁定（0=不锁定，&gt;0=锁定此值）"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>FXDG_SET</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>934</ID>
+      <ID>935</ID>
+      <Description>"[G3] 钱包地址HEX（可选·自动定位失败时手填，8字节）"</Description>
+      <VariableType>8 Bytes</VariableType>
+      <Address>FXDG_ADDR</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>936</ID>
       <Description>"────────── 脚本状态 ──────────"</Description>
       <GroupHeader>1</GroupHeader>
       <VariableType>4 Bytes</VariableType>
       <Address>0</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>935</ID>
+      <ID>937</ID>
       <Description>"[★0] 启动 / 重新定位（1=运行）"</Description>
       <VariableType>Byte</VariableType>
       <Address>FXD_CTL</Address>
     </CheatEntry>
     <CheatEntry>
-      <ID>936</ID>
+      <ID>938</ID>
       <Description>"[G0] 金币模块状态（2=就绪 3=定位中）"</Description>
       <VariableType>Byte</VariableType>
       <Address>FXDG_CTL</Address>

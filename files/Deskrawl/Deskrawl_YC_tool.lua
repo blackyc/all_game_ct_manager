@@ -35,7 +35,7 @@ local SYM = {GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE",
   SAVE2="FXD_SAVE2", CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
   LEVEL="FXD_LEVEL", XP="FXD_XP", MAXHP="FXD_MAXHP", DMG="FXD_DMG",
   MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT",
-  MSSET="FXD_MSSET", ASSET="FXD_ASSET",
+
   MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
   GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD"}
 
@@ -494,6 +494,7 @@ local ENTRIES = {
   {t = "value",  d = "[★17s] MP 设定值（0=自动棘轮，>0=锁定此值）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
+  {t = "value",  d = "[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）", sym = SYM.SAVESCAN, vt = vtByte},
   {t = "header", d = "────────── 脚本状态 ──────────"},
   {t = "value",  d = "[★0] 启动 / 重新定位（1=运行）", sym = SYM.CTL, vt = vtByte},
 }
@@ -553,6 +554,7 @@ function registerAll()
     reg(SYM.KILL, g_ctl + 36)
     reg(SYM.MPSET, g_ctl + 40)
     reg(SYM.NOCD, g_ctl + 44)
+    reg(SYM.SAVESCAN, g_ctl + 52)
   end
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
@@ -606,10 +608,12 @@ local function tick()
       status = 3
     end
   end
-  -- validate save (scan throttled: at most once per 5 s)
+  -- validate save: NEVER auto-scan (full-memory AOB = ~15 s on a 16 GB
+  -- process and it would stall CE every few seconds). Rescanning happens
+  -- only when the user ticks [★21] 扫描存档 (handled further below).
   local okSave = g_save and validSave(g_save)
   if not okSave then
-    if os.clock() - g_lastSaveScan > 5 then
+    if (rdi(g_ctl + 52) or 0) == 1 and os.clock() - g_lastSaveScan > 5 then
       g_lastSaveScan = os.clock()
       local list = findSaveInstances()
       if list[1] then
@@ -725,11 +729,12 @@ local function tick()
     end
   end
 
-  -- SaveData instances: full-memory AOB, keep OFF the startup path and rare
-  if (not g_save or rdq(g_save + 0) ~= g_cls.SaveData)
-     and g_startedAt and (os.clock() - g_startedAt > 10)
-     and os.clock() - g_lastSaveScan > 30 then
+  -- SaveData instances: FULL-MEMORY AOB (seconds on a 16GB process) ->
+  -- user-triggered only via [★21] 扫描存档 (ctl+52), then auto-off.
+  local wantSave = rdi(g_ctl + 52) or 0
+  if wantSave == 1 and os.clock() - g_lastSaveScan > 5 then
     g_lastSaveScan = os.clock()
+    writeInteger(g_ctl + 52, 0)
     local list = findSaveInstances()
     if list[1] then
       g_save, g_save2 = list[1], list[2]
@@ -738,10 +743,82 @@ local function tick()
   end
 
   -- one-hit-kill: throttled full-enemy rescan while enabled
-  if g_killOn and os.clock() - g_lastKillScan > 2 then
+  if g_killOn and os.clock() - g_lastKillScan > 30 then
     g_lastKillScan = os.clock()
     local okK, list = pcall(refreshKillList)
     if okK and list then g_killList = list end
+  end
+
+  if g_ctl then writeBytes(g_ctl, status) end
+end
+
+-- ---------------------------------------------------------------- start/stop
+-- NOTE: must stay LOCAL. A global stopper gets overwritten by the next CT
+-- load, so old instances' auto-stop would kill the NEW instance instead of
+-- themselves (seen live: zombies deleting fresh entries every second).
+local function stopTool()
+  g_stopped = true
+  if g_timer then
+    local t = g_timer
+    g_timer = nil
+    t.destroy()
+  end
+  if g_fastTimer then
+    local t = g_fastTimer
+    g_fastTimer = nil
+    t.destroy()
+  end
+  deleteOwnEntries()
+  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
+  if g_ctl then pcall(deAllocMemory, g_ctl) g_ctl = nil end
+  g_save, g_save2, g_player, g_gm, g_pcc = nil, nil, nil, nil, nil
+  g_lastMs, g_lastAs = nil, nil
+  g_godHP, g_godMP = nil, nil
+  g_godOn, g_mpOn, g_killOn, g_noCDOn = false, false, false, false
+  -- revert modified base stats on stop (一键还原)
+  pcall(function()
+    local player = g_player
+    if not player then return end
+    if _G.FXD_ORIG_MS and g_charOff.BaseMoveSpeed then
+      encObscuredFloat(player + g_charOff.BaseMoveSpeed, _G.FXD_ORIG_MS)
+    end
+    if _G.FXD_ORIG_AS and g_charOff.BaseAttackSpeed then
+      encObscuredFloat(player + g_charOff.BaseAttackSpeed, _G.FXD_ORIG_AS)
+    end
+    _G.FXD_ORIG_MS, _G.FXD_ORIG_AS = nil, nil
+    _G.FXD_LASTMS, _G.FXD_LASTAS = nil, nil
+  end)
+  g_tgtSnap = {}
+  g_savePicked = false
+  log("stopped, entries removed")
+end
+
+local function startTool()
+  -- stop leftovers from any previous load of this tool
+  for _, fn in ipairs(_G.FXD_STOP_ALL) do pcall(fn) end
+  _G.FXD_STOP_ALL = {}
+  if g_timer or g_fastTimer then return end  -- already running
+  g_stopped = false
+  g_fails = 0
+  g_pid = getOpenedProcessID()
+  g_startedAt = os.clock()
+  if not g_pid or g_pid == 0 then error("no process attached") end
+
+  -- clean leftovers from a previous run
+  deleteOwnEntries()
+  for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
+
+  resolveClasses()
+
+  -- SaveData field offsets (all resolved by name, no hardcoding)
+  local need = {"Level", "CurrentXP", "BaseMaxHealth", "BaseDamage", "CurrentHP",
+    "BaseMaxMana", "CurrentMana", "BasePrimaryStat", "TalentOutstandingPoints",
+    "TotalEarnedGold", "TotalGameTime"}
+  local want = {}
+  for _, k in ipairs(need) do want[k] = 1 end
+  g_foff = fieldOffsets(g_cls.SaveData, want)
+  for _, k in ipairs(need) do
+    if not g_foff[k] then error("SaveData field offset missing: " .. k) end
   end
 
   -- Character field offsets (encrypted base stats)
@@ -760,7 +837,6 @@ local function tick()
     g_gm, g_pcc, g_player = gm, pcc, player
   end
 
-
   -- hp/mana offsets
   if g_save and g_player then
     g_hpOff, g_manaOff = resolveHpMana(g_save, g_player)
@@ -772,8 +848,8 @@ local function tick()
   --                god@28 mpi@32 kill@36
   g_ctl = allocateMemory(64)
   -- allocateMemory returns DIRTY memory: zero the WHOLE block, otherwise the
-  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44)
-  -- may start non-zero and fire heavy work on the very first tick.
+  -- toggle/setpoint slots (god@28 mpi@32 kill@36 mpset@40 nocd@44 save@52)
+  -- may start non-zero and fire heavy work (gold sweep) on the very first tick.
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
   end
