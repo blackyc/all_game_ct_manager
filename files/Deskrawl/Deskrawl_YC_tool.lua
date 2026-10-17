@@ -29,15 +29,17 @@
 --     本脚本刻意不写这些字段，避免触发游戏的反作弊检测。
 -- =============================================================================
 
-local VERSION = "1.5.0"
+local VERSION = "1.7.0"
 local ENTRY_TAG = "FXD"
-local SYM = {GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE",
-  SAVE2="FXD_SAVE2", CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
+local SYM = {
+  GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE", SAVE2="FXD_SAVE2",
+  CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
   LEVEL="FXD_LEVEL", XP="FXD_XP", MAXHP="FXD_MAXHP", DMG="FXD_DMG",
-  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT",
-
-  MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
-  GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD"}
+  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT", TOTALGOLD="FXD_TOTALGOLD",
+  MSSET="FXD_MSSET", ASSET="FXD_ASSET", MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
+  GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD",
+  SAVESCAN="FXD_SAVESCAN", SAVERES="FXD_SAVERES",
+}
 
 -- fallback offsets (game v-current verified; used only when heuristic ambiguous)
 local FB = {hp = 0x118, mana = 0x120}
@@ -516,6 +518,96 @@ local function refreshStatBuf()
   end
 end
 
+-- ------------------------------------------------- save JSON parser
+-- The game keeps a decrypted UTF-16 snapshot of the save JSON in memory
+-- ({"Version":5,"LocalSlots":[{"Data":{"Level":..,"CurrentXP":..,...}}]})
+-- refreshed on every state change. Parsing it yields the values that otherwise
+-- only exist in the (transient) SaveData object. The address is cached, so
+-- only the first lookup pays the (~15 s on a 16 GB process) full-memory AOB.
+local g_jsonAddr = nil
+local JSON_PREFIX = [[{"Version":]]
+local JSON_KEYS = {
+  { key = "Level",                   slot = 0,  isFloat = false },
+  { key = "CurrentXP",               slot = 20, isFloat = false },
+  { key = "BaseMaxHealth",           slot = 4,  isFloat = false },
+  { key = "BaseDamage",              slot = 8,  isFloat = false },
+  { key = "BaseMaxMana",             slot = 12, isFloat = false },
+  { key = "BasePrimaryStat",         slot = 16, isFloat = true },
+  { key = "TalentOutstandingPoints", slot = 24, isFloat = false },
+}
+
+local function jsonUnit(a, i)
+  local v = rdi(a + i * 2)
+  if not v then return nil end
+  return v & 0xFFFF
+end
+
+local function jsonAddrValid(a)
+  if not a or a < 0x10000 then return false end
+  for c = 1, #JSON_PREFIX do
+    if jsonUnit(a, c - 1) ~= JSON_PREFIX:byte(c) then return false end
+  end
+  return true
+end
+
+local function locateJson()
+  if jsonAddrValid(g_jsonAddr) then return g_jsonAddr end
+  local sl = AOBScan([[7B 00 22 00 56 00 65 00 72 00 73 00 69 00 6F 00 6E 00 22 00 3A 00 35 00]], "+W-C")
+  if not sl or sl.Count == 0 then return nil end
+  local a = tonumber(sl[0], 16)
+  sl.destroy()
+  if jsonAddrValid(a) then
+    g_jsonAddr = a
+    return a
+  end
+  return nil
+end
+
+local function parseSaveJson()
+  local a = locateJson()
+  if not a then return nil, "JSON not found" end
+  local got, MAXU, done = 0, 40000, {}
+  for i = 0, MAXU do
+    if jsonUnit(a, i) == 0x22 then
+      for _, k in ipairs(JSON_KEYS) do
+        if not done[k.key] then
+          local ok = true
+          for c = 1, #k.key do
+            if jsonUnit(a, i + c) ~= k.key:byte(c) then ok = false break end
+          end
+          if ok then
+            local j = i + #k.key + 1
+            if jsonUnit(a, j) == 0x22 then j = j + 1 end
+            if jsonUnit(a, j) == 0x3A then
+              j = j + 1
+              local num, dot, frac, digits = 0, false, 0, 0
+              while digits < 12 do
+                local v = jsonUnit(a, j)
+                if not v then break end
+                if v >= 48 and v <= 57 then
+                  if dot then frac = frac * 10 + (v - 48) else num = num * 10 + (v - 48) end
+                elseif v == 0x2E then dot = true
+                else break end
+                j = j + 1
+                digits = digits + 1
+              end
+              local val = num
+              if dot and frac > 0 then val = num + frac / (10 ^ #tostring(frac)) end
+              if g_buf then
+                if k.isFloat then writeFloat(g_buf + k.slot, val)
+                else writeInteger(g_buf + k.slot, math.floor(val)) end
+              end
+              done[k.key] = true
+              got = got + 1
+            end
+          end
+        end
+      end
+    end
+  end
+  return a, string.format("%d/%d fields", got, #JSON_KEYS)
+end
+
 -- ---------------------------------------------------------------- entries
 local ENTRIES = {
   {t = "header", d = "═══ 挂机破坏神 辅助脚本 —— 角色状态 + 数值修改 ═══"},
@@ -529,12 +621,12 @@ local ENTRIES = {
   {t = "value",  d = "[2] 当前法力", sym = SYM.MANA, vt = vtDword},
   {t = "header", d = "────────── 角色数据 ──────────"},
   {t = "value",  d = "[4] 等级（实时）", sym = SYM.LEVEL, vt = vtDword},
-  {t = "value",  d = "[5] 当前经验（存档对象瞬态，需勾 [★21]）", sym = SYM.XP, vt = vtDword},
+  {t = "value",  d = "[5] 当前经验（勾 [★21] 解析存档后显示）", sym = SYM.XP, vt = vtDword},
   {t = "value",  d = "[6] 最大生命·基础值（面板上限=基础+装备加成）", sym = SYM.MAXHP, vt = vtDword},
   {t = "value",  d = "[7] 基础伤害（未计装备加成）", sym = SYM.DMG, vt = vtDword},
   {t = "value",  d = "[8] 最大法力·基础值", sym = SYM.MAXMANA, vt = vtDword},
   {t = "value",  d = "[9] 主属性（智力/力量·实时）", sym = SYM.PSTAT, vt = vtSingle},
-  {t = "value",  d = "[10] 可用天赋点（存档对象瞬态，需勾 [★21]）", sym = SYM.TALENT, vt = vtDword},
+  {t = "value",  d = "[10] 可用天赋点（勾 [★21] 解析存档后显示）", sym = SYM.TALENT, vt = vtDword},
   {t = "header", d = "────────── 属性修改（立即生效）──────────"},
   {t = "value",  d = "[★12] 移动速度设定（默认 8，0=不修改）", sym = SYM.MSSET, vt = vtSingle},
   {t = "value",  d = "[13] 移动速度当前值", sym = SYM.MSSHOW, vt = vtSingle},
@@ -546,8 +638,8 @@ local ENTRIES = {
   {t = "value",  d = "[★17s] MP 设定值（默认 100，0=自动棘轮）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
-  {t = "value",  d = "[★21] 扫描存档（勾一下；最多自动重试 4 次）", sym = SYM.SAVESCAN, vt = vtByte},
-  {t = "value",  d = "[★22] 扫描结果（0未扫描 1扫描中 2已找到 3未找到）", sym = SYM.SAVERES, vt = vtByte},
+  {t = "value",  d = "[★21] 解析存档数据（首次约 15 秒，之后瞬时）", sym = SYM.SAVESCAN, vt = vtByte},
+  {t = "value",  d = "[★22] 解析结果（0未解析 1解析中 2成功 3失败）", sym = SYM.SAVERES, vt = vtByte},
   {t = "header", d = "────────── 脚本状态 ──────────"},
   {t = "value",  d = "[★0] 主脚本运行状态（1=运行 2=就绪 3=失联重试）", sym = SYM.CTL, vt = vtByte},
 }
@@ -620,6 +712,8 @@ function registerAll()
     reg(SYM.DMG, g_buf + 8)
     reg(SYM.MAXMANA, g_buf + 12)
     reg(SYM.PSTAT, g_buf + 16)
+    reg(SYM.XP, g_buf + 20)
+    reg(SYM.TALENT, g_buf + 24)
   end
 end
 
@@ -786,34 +880,21 @@ local function tick()
 
   -- SaveData instances: FULL-MEMORY AOB (seconds on a 16GB process) ->
   -- user-triggered only via [★21] 扫描存档 (ctl+52), then auto-off.
-  -- [★21] manual save scan: the SaveData object only exists for a few seconds
-  -- around load/save, so retry a few times and report the result in [★22]
+  -- [★21] parse the cached save JSON into the display buffer
+  -- (cached address => instant; first run pays one full-memory AOB)
   local wantSave = rdi(g_ctl + 52) or 0
-  if wantSave == 1 and g_scanTries < 4 then
-    if g_scanNext == 0 then
-      g_scanNext = os.clock()
-      writeInteger(g_ctl + 56, 1)      -- [★22] 1 = scanning
-    elseif os.clock() - g_scanNext > 2 then
-      g_scanTries = g_scanTries + 1
-      g_lastSaveScan = os.clock()
-      writeInteger(g_ctl + 56, 1)
-      local list = findSaveInstances()  -- ~15 s on a 16 GB process
-      if list[1] then
-        g_save, g_save2 = list[1], list[2]
-        registerAll()
-        writeInteger(g_ctl + 52, 0)
-        writeInteger(g_ctl + 56, 2)      -- [★22] 2 = found
-        g_scanTries, g_scanNext = 4, 0
-        log("save data found: " .. string.format("%X", g_save))
-      elseif g_scanTries >= 4 then
-        writeInteger(g_ctl + 52, 0)
-        writeInteger(g_ctl + 56, 3)      -- [★22] 3 = not found
-        g_scanNext = 0
-        log("save data not found after 4 tries (it only exists right after load/save)")
-      end
+  if wantSave == 1 and os.clock() - g_lastSaveScan > 3 then
+    g_lastSaveScan = os.clock()
+    writeInteger(g_ctl + 52, 0)
+    writeInteger(g_ctl + 56, 1)
+    local okP, res = pcall(parseSaveJson)
+    if okP and res then
+      writeInteger(g_ctl + 56, 2)
+      log("save json parsed at " .. string.format("%X", res))
+    else
+      writeInteger(g_ctl + 56, 3)
+      log("save json parse failed: " .. tostring(res))
     end
-  elseif wantSave ~= 1 then
-    g_scanTries, g_scanNext = 0, 0
   end
 
   -- live stat display buffer (cheap decrypts, keeps rows readable)
@@ -848,13 +929,17 @@ local function stopTool()
   deleteOwnEntries()
   for _, k in pairs(SYM) do pcall(unregisterSymbol, k) end
   if g_ctl then pcall(deAllocMemory, g_ctl) g_ctl = nil end
-  g_save, g_save2, g_player, g_gm, g_pcc = nil, nil, nil, nil, nil
+  if g_tmpMem then pcall(deAllocMemory, g_tmpMem) g_tmpMem = nil end
+  if g_buf then pcall(deAllocMemory, g_buf) g_buf = nil end
+  g_jsonAddr = nil
+  g_save, g_save2, g_gm, g_pcc = nil, nil, nil, nil
+  local player = g_player   -- captured before clearing: the revert block below uses it
+  g_player = nil
   g_lastMs, g_lastAs = nil, nil
   g_godHP, g_godMP = nil, nil
   g_godOn, g_mpOn, g_killOn, g_noCDOn = false, false, false, false
   -- revert modified base stats on stop (一键还原)
   pcall(function()
-    local player = g_player
     if not player then return end
     if _G.FXD_ORIG_MS and g_charOff.BaseMoveSpeed then
       encObscuredFloat(player + g_charOff.BaseMoveSpeed, _G.FXD_ORIG_MS)
@@ -939,6 +1024,7 @@ local function startTool()
     writeInteger(g_ctl + 44, 1)   -- [★19] no-CD: ON by default
   end
   g_tmpMem = allocateMemory(16)
+  if not (g_ctl and g_tmpMem) then error("allocateMemory failed - CE out of memory blocks; restart CE") end
   g_buf = allocateMemory(64)
   if g_buf then
     for i = 0, 15 do writeInteger(g_buf + i * 4, 0) end
