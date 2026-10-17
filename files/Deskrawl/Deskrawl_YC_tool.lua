@@ -29,7 +29,7 @@
 --     本脚本刻意不写这些字段，避免触发游戏的反作弊检测。
 -- =============================================================================
 
-local VERSION = "1.7.0"
+local VERSION = "1.7.1"
 local ENTRY_TAG = "FXD"
 local SYM = {
   GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE", SAVE2="FXD_SAVE2",
@@ -68,6 +68,7 @@ local g_lastMs, g_lastAs = nil, nil  -- last applied setpoints
 local g_godHP, g_godMP = nil, nil    -- locked values for god/mp
 local g_godOn, g_mpOn, g_killOn = false, false, false
 local g_noCDOn = false                    -- no-CD toggle
+local g_nocdOrig = {}                     -- gate snapshots for restore-on-disable
 local g_fastTimer = nil               -- 60ms combat pin timer
 local g_tmpMem = nil                 -- scratch memory for float<->bits
 local g_tgtSnap = {}                 -- addr -> {t=TotalGameTime, c=os.clock()} for liveness
@@ -873,8 +874,28 @@ local function tick()
     local ncd = g_ctl and (rdi(g_ctl + 44) or 0) or 0
     if ncd == 1 and not g_noCDOn then
       g_noCDOn = true
+      -- snapshot the three gates so disabling restores the game's own values
+      g_nocdOrig = {}
+      if g_pcc and rdq(g_pcc + 0) == g_cls.PlayerCombatController then
+        local pac = rdq(g_pcc + 0x70)
+        if pac and pac > 0x10000 then
+          g_nocdOrig.pac = pac
+          g_nocdOrig.a = readFloat(pac + 0x68)
+          g_nocdOrig.b = readFloat(pac + 0xB4)
+          local o = rdq(pac + 0x60)
+          if o and o > 0x10000 then g_nocdOrig.o, g_nocdOrig.c = o, readFloat(o + 0x24) end
+        end
+      end
     elseif ncd == 0 and g_noCDOn then
       g_noCDOn = false
+      -- restore the game's own values that we zeroed while enabled
+      local pac = g_nocdOrig.pac
+      if pac and pac > 0x10000 then
+        if g_nocdOrig.a then pcall(writeFloat, pac + 0x68, g_nocdOrig.a) end
+        if g_nocdOrig.b then pcall(writeFloat, pac + 0xB4, g_nocdOrig.b) end
+        if g_nocdOrig.o and g_nocdOrig.c then pcall(writeFloat, g_nocdOrig.o + 0x24, g_nocdOrig.c) end
+      end
+      g_nocdOrig = {}
     end
   end
 
@@ -901,7 +922,7 @@ local function tick()
   refreshStatBuf()
 
   -- one-hit-kill: throttled full-enemy rescan while enabled
-  if g_killOn and os.clock() - g_lastKillScan > 30 then
+  if g_killOn and os.clock() - g_lastKillScan > 10 then
     g_lastKillScan = os.clock()
     local okK, list = pcall(refreshKillList)
     if okK and list then g_killList = list end
@@ -1061,10 +1082,10 @@ local function startTool()
     if g_noCDOn and g_pcc and rdq(g_pcc + 0) == g_cls.PlayerCombatController then
       local pac = rdq(g_pcc + 0x70)
       if pac and pac > 0x10000 then
-        pcall(writeFloat, pac + 0x68, 0)   -- GCD remaining
-        pcall(writeFloat, pac + 0xB4, 0)   -- skill CD remaining
+        if (readFloat(pac + 0x68) or 0) > 0 then pcall(writeFloat, pac + 0x68, 0) end -- GCD remaining
+        if (readFloat(pac + 0xB4) or 0) > 0 then pcall(writeFloat, pac + 0xB4, 0) end -- skill CD remaining
         local o = rdq(pac + 0x60)
-        if o and o > 0x10000 then
+        if o and o > 0x10000 and (readFloat(o + 0x24) or 0) > 0 then
           pcall(writeFloat, o + 0x24, 0)   -- cast state timer
         end
       end
