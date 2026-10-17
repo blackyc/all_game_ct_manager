@@ -57,6 +57,7 @@ local g_hpOff, g_manaOff = nil, nil
 local g_pccOff, g_plOff = nil, nil   -- cached chain offsets
 local g_lastSaveScan = 0             -- throttle for save-instance rescans
 local g_startedAt = nil               -- tool start time (skip heavy scans early)
+local g_scanTries, g_scanNext = 0, 0  -- [★21] save-scan retry state
 local g_killList = {}                -- Enemy instances for one-hit-kill
 local g_lastKillScan = 0             -- throttle for enemy rescan
 local g_charOff = {}                 -- Character field offsets (BaseMoveSpeed etc)
@@ -494,7 +495,8 @@ local ENTRIES = {
   {t = "value",  d = "[★17s] MP 设定值（默认 100，0=自动棘轮）", sym = SYM.MPSET, vt = vtDword},
   {t = "value",  d = "[★18] 一击必杀（1=开，0=关）", sym = SYM.KILL, vt = vtByte},
   {t = "value",  d = "[★19] 无CD（1=开，0=关）", sym = SYM.NOCD, vt = vtByte},
-  {t = "value",  d = "[★21] 扫描存档（勾一下等数秒；存档对象为瞬态，平时可能搜不到）", sym = SYM.SAVESCAN, vt = vtByte},
+  {t = "value",  d = "[★21] 扫描存档（勾一下；最多自动重试 4 次）", sym = SYM.SAVESCAN, vt = vtByte},
+  {t = "value",  d = "[★22] 扫描结果（0未扫描 1扫描中 2已找到 3未找到）", sym = SYM.SAVERES, vt = vtByte},
   {t = "header", d = "────────── 脚本状态 ──────────"},
   {t = "value",  d = "[★0] 主脚本运行状态（1=运行 2=就绪 3=失联重试）", sym = SYM.CTL, vt = vtByte},
 }
@@ -555,6 +557,7 @@ function registerAll()
     reg(SYM.MPSET, g_ctl + 40)
     reg(SYM.NOCD, g_ctl + 44)
     reg(SYM.SAVESCAN, g_ctl + 52)
+    reg(SYM.SAVERES, g_ctl + 56)
   end
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
@@ -613,7 +616,7 @@ local function tick()
   -- only when the user ticks [★21] 扫描存档 (handled further below).
   local okSave = g_save and validSave(g_save)
   if not okSave then
-    if (rdi(g_ctl + 52) or 0) == 1 and os.clock() - g_lastSaveScan > 5 then
+    if false and (rdi(g_ctl + 52) or 0) == 1 and os.clock() - g_lastSaveScan > 5 then
       g_lastSaveScan = os.clock()
       local list = findSaveInstances()
       if list[1] then
@@ -731,15 +734,34 @@ local function tick()
 
   -- SaveData instances: FULL-MEMORY AOB (seconds on a 16GB process) ->
   -- user-triggered only via [★21] 扫描存档 (ctl+52), then auto-off.
+  -- [★21] manual save scan: the SaveData object only exists for a few seconds
+  -- around load/save, so retry a few times and report the result in [★22]
   local wantSave = rdi(g_ctl + 52) or 0
-  if wantSave == 1 and os.clock() - g_lastSaveScan > 5 then
-    g_lastSaveScan = os.clock()
-    writeInteger(g_ctl + 52, 0)
-    local list = findSaveInstances()
-    if list[1] then
-      g_save, g_save2 = list[1], list[2]
-      registerAll()
+  if wantSave == 1 and g_scanTries < 4 then
+    if g_scanNext == 0 then
+      g_scanNext = os.clock()
+      writeInteger(g_ctl + 56, 1)      -- [★22] 1 = scanning
+    elseif os.clock() - g_scanNext > 2 then
+      g_scanTries = g_scanTries + 1
+      g_lastSaveScan = os.clock()
+      writeInteger(g_ctl + 56, 1)
+      local list = findSaveInstances()  -- ~15 s on a 16 GB process
+      if list[1] then
+        g_save, g_save2 = list[1], list[2]
+        registerAll()
+        writeInteger(g_ctl + 52, 0)
+        writeInteger(g_ctl + 56, 2)      -- [★22] 2 = found
+        g_scanTries, g_scanNext = 4, 0
+        log("save data found: " .. string.format("%X", g_save))
+      elseif g_scanTries >= 4 then
+        writeInteger(g_ctl + 52, 0)
+        writeInteger(g_ctl + 56, 3)      -- [★22] 3 = not found
+        g_scanNext = 0
+        log("save data not found after 4 tries (it only exists right after load/save)")
+      end
     end
+  elseif wantSave ~= 1 then
+    g_scanTries, g_scanNext = 0, 0
   end
 
   -- one-hit-kill: throttled full-enemy rescan while enabled
@@ -853,9 +875,11 @@ local function startTool()
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
     -- sensible defaults so users can just tick the checkbox
-    writeFloat(g_ctl + 4, 8)     -- [★12] move speed setpoint
-    writeFloat(g_ctl + 8, 2)     -- [★14] attack speed setpoint
+    writeFloat(g_ctl + 4, 8)      -- [★12] move speed setpoint
+    writeFloat(g_ctl + 8, 2)      -- [★14] attack speed setpoint
+    writeInteger(g_ctl + 32, 1)   -- [★17] MP infinite: ON by default
     writeInteger(g_ctl + 40, 100) -- [★17s] MP lock value
+    writeInteger(g_ctl + 44, 1)   -- [★19] no-CD: ON by default
   end
   g_tmpMem = allocateMemory(16)
 
