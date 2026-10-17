@@ -9,7 +9,7 @@
 | VED | 0.0.1865 | VED_YC_CheatTable.CT | 完整版:无限格挡 / 敌人定身 / 商店无限刷新 / 动作速度倍率 | Game Cheats Manager | 社区作者 **ELYSIUM** |
 | VED | 0.0.1865 | VED_YC_Lite.CT | 精简版:仅上述新增功能 | Game Cheats Manager | 社区作者 **ELYSIUM** |
 | ForgeTax | - | ForgeTax_YC.CT | 敲击结果控制:强制大成功(剑永不损坏、价值只增不减) + 剑价值/等级/界面概率显示 | - | - |
-| Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 角色状态显示+数值修改:实时生命/法力、移动/攻击速度(ACTk 解密直写)、存档数值、战斗开关(锁血/锁蓝/一击必杀/无CD);附《ACTk_解密笔记.md》 | - | - |
+| Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 角色状态+数值修改:实时生命/法力/金币、存档数值、移速/攻速直写、锁血/MP无限/一击必杀/无CD/金币锁定(已破解 ACTk Int/Float/Long 与紧凑版加密);附《ACTk_解密笔记.md》 | - | - |
 
 ## 使用
 
