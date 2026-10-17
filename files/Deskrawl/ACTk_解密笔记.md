@@ -1,6 +1,6 @@
 # 挂机破坏神（Idle Diablo / Deskrawl.exe）ACTk 加密破解笔记
 
-作者:**YC**　日期:2026-10-16　适用:ACTk (CodeStage Anti-Cheat Toolkit) 2.x + Unity IL2CPP
+作者:**YC**　日期:2026-10-16 / 10-17 增补　适用:ACTk (CodeStage Anti-Cheat Toolkit) 2.x + Unity IL2CPP
 
 本文记录在本作中完全破解 ACTk 2.x 内存加密的完整过程:结构布局、加解密算法、
 校验 hash 算法、写入流程,以及定位方法(可复用到任何使用 ACTk 的 Unity 游戏)。
@@ -51,8 +51,32 @@ ObscuredCheatingDetector / InjectionDetector / SpeedHackDetector ...
 | +0x08 | 4 | currentCryptoKey |
 | +0x0C | 4 | fakeValue |
 
-ObscuredLong/Double 32 字节:hash(4) + hiddenValue ACTkByte8(8) + key(4) +
-fake(8) + oldByte4(1) + pad。8 字节 detour 与 4 字节不同,见第六节。
+### ObscuredLong / ObscuredDouble(32 字节,ACTkByte8)
+
+| 偏移 | 大小 | 字段 | 说明 |
+|---|---|---|---|
+| +0x00 | 4 | hash | 完整性校验(算法见下,8 字节版仍未还原) |
+| +0x04 | 4 | pad | 恒 0 |
+| +0x08 | 8 | hiddenValue (ACTkByte8) | 加密后的 64 位值 |
+| +0x10 | 8 | currentCryptoKey | 每实例随机 64 位密钥 |
+| +0x18 | 8 | fakeValue | **实测恒 0**——Long/Double 的蜜罐未启用 |
+
+### 已破解:ObscuredLong 的 8 字节 detour(2026-10-17)
+
+```
+明文 value = (hidden - key) XOR key          ; 64 位无符号运算 (mod 2^64)
+加密 hidden = (value XOR key) + key          ; 与 4 字节 Int 完全同形!
+```
+
+验证:BaseMaxMana@D8 解出**恰好 100** = 面板最大法力 100。
+其余 BaseMaxHealth / 交易金币等 64 位字段同构。
+
+**8 字节 hash 算法仍未还原**(4 字节 FNV 循环的 8 字节扩展版,
+sweep 了 basis/prime/字节序组合均不中,存的是 0xDA03B3E9 这样的值)。
+影响:无法用 hash-hunt 定位 Long 字段,定位靠结构遍历或差分;
+写入时保留原 hash 即可——**ACTk 只在读取时校验 hash 是否与明文匹配,
+不重算的话把原 hash 原样留着也能过**(前提:明文写入后游戏会用它重算并覆盖 hash,
+或该字段未启用校验,写入后观察即可)。
 
 ## 四、加解密算法(反汇编 op_Implicit 核心函数得出)
 
@@ -108,9 +132,9 @@ hash = h | 1                              ; 强制 bit0=1
 ## 六、已破解范围与未完成
 
 - ✅ ObscuredInt / ObscuredFloat:完整读写(CT 里 [★4] 移动速度 / [★5] 攻击速度)
-- ⬜ ObscuredLong/Double(ACTkByte8):本作 BaseMaxHealth/BaseMaxMana 用它,
-  8 字节 detour 算法待反汇编(Byte4 的 FNV 循环会扩成 8 字节版本,
-  定位方法相同:ObscuredLong 的 op_Implicit → core)
+- ✅ ObscuredLong/Double(ACTkByte8):detour 已破解(见第三节),
+  BaseMaxHealth/BaseMaxMana/金币等 64 位字段可解密;写入时保留原 hash
+- ⬜ 8 字节版 hash 算法(定位 Long 字段时用,写入暂不需要)
 - ⬜ ObscuredString:byte[] 引用型,另一套
 
 ## 七、定位方法(通用流程,换游戏可复用)
@@ -169,5 +193,59 @@ end
 | 等级(基础) | Character+0x20 | ObscuredInt | ❌ 已破解 |
 | 等级/经验/累计金币(存档) | SaveData@0x10/0x18/0x170 | int | ✅ |
 | 可用天赋点(存档) | SaveData@0x98 | int | ✅ |
-| **当前金币** | SavedStash.Gold@0x20(权威实例=SaveContainer.LocalStash) | int | ✅ |
+| **当前金币** | **未定位!** SavedStash.Gold@0x20 是误定位(仓库只存物品) | 疑似加密 | ❌ |
+| 最大生命/最大法力(基础) | Character@0x30/0xD8 | ObscuredLong | ❌ 已破解(明文 100) |
 | Player 链 | GameManager 单例(静态+0)→+0x40→+0x20 | — | — |
+| 技能 CD | PlayerAbilityController(=PCC+0x70):GCD@+0x68、技能CD@+0xB4、施法状态对象+0x60→+0x24 | float | ✅(压 0 = 无CD) |
+
+---
+
+## 十、外部情报(2026-10-17 情报收集,别的 ACTk 游戏直接可用)
+
+### 10.1 ObscuredPrefs 离线解密(PlayerPrefs 路线,比内存扫描稳)
+
+仓库:`NotHyper-474/CodeStage-ObscuredPrefs-Decrypter`(C# 开源)
+
+- **cryptokey 存在注册表**:键名 = `MD2("ElonShotMarsWithACar")` =
+  `9978e9f39c218d674463dab9dc728bd6`,值为 base64,解码即密钥
+- 注册表位置:`HKCU\SOFTWARE\<公司名>\<游戏名>`(本作 = First Day Games\Deskrawl)
+- **老版 ACTk(≤1.x)密钥恒为 `e806f6`**
+- 原始数据格式:base64 解码后,**类型字节在 `bytes[len-7]`,版本字节在 `bytes[len-6]`**
+  (version > 10 即格式不识别);数据本体与密钥做逐字符 XOR
+- 该工具源码 `EncrypterDecrypter.cs` 可直接抄加解密逻辑
+
+### 10.2 官方 API 文档要点(docs.codestage.net/actk/api)
+
+- `ObscuredInt.Encrypt(value, key)` / `Decrypt(value, key)` 是公开静态方法——
+  IL2CPP 游戏里这两个方法名是干净的,可直接定位核心算法
+- `DecryptFromV0(value, key)`:**ACTk 2024.0 起加密格式变更**,
+  旧数据(V0)用此方法解——遇到解不开的老存档先试 V0 格式
+- `Hash` 属性 = "对解密后明文计算的稳定 hash,与加密数据同存储"
+  ——证实 hash 是对**明文**算的,不是对密文
+- `RandomizeCryptoKey()`:**不改明文、只换随机密钥**,
+  官方建议开发者定期调用以反制"未知值搜索"——
+  差分扫描时若发现 hidden 变了但值没变,就是这个原因;
+  也意味着**key 不是会话常量**,差分验证时要容忍 key 轮换
+
+### 10.3 方法论避坑清单(本项目血泪换来的,次次适用)
+
+1. **验证写入存活性前,先停掉自己所有会写该地址的定时器**——
+   "写入被弹回"最大的嫌疑是自己的 pin 在写回(本作锁血事件),
+   而不是游戏回填镜像
+2. **每帧被写的热地址禁止下调试器断点**——命中风暴会卡死 CE 桥接 worker
+   (管道 231 全占,须重载桥接 Lua);找写入者用差分扫描
+3. **明文扫描不中 = 有加密**。ACTk 字段定位法:actkHash(候选明文) 做 AOB,
+   命中处验证四元组 (hash|hidden|key|fake) 自洽——前提是 hash 算法已知
+4. **差分扫描对"每帧抖动的易变值"不收敛**——用 changed / unchanged
+   **交替过滤**(变化轮抓金币事件,静置轮甩掉动画/计时器),
+   最后在 CE 内部遍历结果集做数学验证,别把几十万行拉回 CLI
+5. **先做结构直读,再考虑全内存扫描**——从 Manager 单例链一层层 deref
+   (本作技能 CD 就在 PCC+0x70 的 PlayerAbilityController 里),
+   比全内存省一个数量级的时间
+6. **已知明文验证 detour**:列 5-6 个候选公式
+   ((h-k)^k、h^k、swap 后^k、(h^k)-k...),找一个解出"干净数"(如 100/10.0)的;
+   一个样本不够就用第二个结构交叉验证
+7. **CE Lua 陷阱**:`1 << 64` == 0(移位溢出);readQword 对 >2^53 的值走 double
+   丢精度——64 位运算用两个 readInteger 拼 int64;脚本里严禁 busy-wait
+8. **找字段先枚举类定义**:`il2cpp_class_get_fields` 全程序集遍历,
+   字段名(Gold/Cost/XP/CD...)常直接暴露答案,比盲扫快得多
