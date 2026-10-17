@@ -39,7 +39,7 @@ if syntaxcheck then return end
 --     本脚本刻意不写这些字段，避免触发游戏的反作弊检测。
 -- =============================================================================
 
-local VERSION = "1.7.1"
+local VERSION = "1.7.2"
 local ENTRY_TAG = "FXD"
 local SYM = {
   GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE", SAVE2="FXD_SAVE2",
@@ -639,9 +639,9 @@ local ENTRIES = {
   {t = "value",  d = "[9] 主属性（智力/力量·实时）", sym = SYM.PSTAT, vt = vtSingle},
   {t = "value",  d = "[10] 可用天赋点（勾 [★21] 解析存档后显示）", sym = SYM.TALENT, vt = vtDword},
   {t = "header", d = "────────── 属性修改（立即生效）──────────"},
-  {t = "value",  d = "[★12] 移动速度设定（默认 8，0=不修改）", sym = SYM.MSSET, vt = vtSingle},
+  {t = "value",  d = "[★12] 移动速度设定（0=不修改）", sym = SYM.MSSET, vt = vtSingle},
   {t = "value",  d = "[13] 移动速度当前值", sym = SYM.MSSHOW, vt = vtSingle},
-  {t = "value",  d = "[★14] 攻击速度设定（默认 2，0=不修改）", sym = SYM.ASSET, vt = vtSingle},
+  {t = "value",  d = "[★14] 攻击速度设定（0=不修改）", sym = SYM.ASSET, vt = vtSingle},
   {t = "value",  d = "[15] 攻击速度当前值", sym = SYM.ASSHOW, vt = vtSingle},
   {t = "header", d = "────────── 战斗开关（进入战斗后勾选）──────────"},
   {t = "value",  d = "[★16] 锁血（1=开，0=关）", sym = SYM.GOD, vt = vtByte},
@@ -1047,12 +1047,14 @@ local function startTool()
   -- may start non-zero and fire heavy work (gold sweep) on the very first tick.
   if g_ctl then
     for i = 0, 7 do writeQword(g_ctl + i * 8, 0) end
-    -- sensible defaults so users can just tick the checkbox
-    writeFloat(g_ctl + 4, 8)      -- [★12] move speed setpoint
-    writeFloat(g_ctl + 8, 2)      -- [★14] attack speed setpoint
-    writeInteger(g_ctl + 32, 1)   -- [★17] MP infinite: ON by default
-    writeInteger(g_ctl + 40, 100) -- [★17s] MP lock value
-    writeInteger(g_ctl + 44, 1)   -- [★19] no-CD: ON by default
+    -- everything OFF by default: the user ticks what they want.
+    -- (speed setpoints stay 0 = "don't modify"; MP setpoint only matters
+    --  once [★17] is ticked, and 100 = full mana there)
+    writeFloat(g_ctl + 4, 0)      -- [★12] move speed setpoint (0 = 不修改)
+    writeFloat(g_ctl + 8, 0)      -- [★14] attack speed setpoint (0 = 不修改)
+    writeInteger(g_ctl + 32, 0)   -- [★17] MP infinite: OFF
+    writeInteger(g_ctl + 40, 100) -- [★17s] MP lock value (used when [★17] on)
+    writeInteger(g_ctl + 44, 0)   -- [★19] no-CD: OFF
   end
   g_tmpMem = allocateMemory(16)
   if not (g_ctl and g_tmpMem) then error("allocateMemory failed - CE out of memory blocks; restart CE") end
@@ -1584,7 +1586,7 @@ if DeskrawlGold_Stop then DeskrawlGold_Stop() end
     </CheatEntry>
     <CheatEntry>
       <ID>920</ID>
-      <Description>"[★12] 移动速度设定（默认 8，0=不修改）"</Description>
+      <Description>"[★12] 移动速度设定（0=不修改）"</Description>
       <VariableType>Float</VariableType>
       <Address>FXD_MSSET</Address>
     </CheatEntry>
@@ -1596,7 +1598,7 @@ if DeskrawlGold_Stop then DeskrawlGold_Stop() end
     </CheatEntry>
     <CheatEntry>
       <ID>922</ID>
-      <Description>"[★14] 攻击速度设定（默认 2，0=不修改）"</Description>
+      <Description>"[★14] 攻击速度设定（0=不修改）"</Description>
       <VariableType>Float</VariableType>
       <Address>FXD_ASSET</Address>
     </CheatEntry>
