@@ -29,12 +29,12 @@
 --     本脚本刻意不写这些字段，避免触发游戏的反作弊检测。
 -- =============================================================================
 
-local VERSION = "1.3.0"
+local VERSION = "1.4.0"
 local ENTRY_TAG = "FXD"
 local SYM = {GM="FXD_GM", PCC="FXD_PCC", PLAYER="FXD_PLAYER", SAVE="FXD_SAVE",
   SAVE2="FXD_SAVE2", CTL="FXD_CTL", HP="FXD_HP", MANA="FXD_MANA",
   LEVEL="FXD_LEVEL", XP="FXD_XP", MAXHP="FXD_MAXHP", DMG="FXD_DMG",
-  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT", GOLD="FXD_GOLD",
+  MAXMANA="FXD_MAXMANA", PSTAT="FXD_PSTAT", TALENT="FXD_TALENT", GOLD="FXD_GOLD", GOLDSET="FXD_GOLDSET",
   STASH="FXD_STASH", MSSET="FXD_MSSET", ASSET="FXD_ASSET",
   MSSHOW="FXD_MSSHOW", ASSHOW="FXD_ASSHOW",
   GOD="FXD_GOD", MPI="FXD_MPI", KILL="FXD_KILL", MPSET="FXD_MPSET", NOCD="FXD_NOCD"}
@@ -65,6 +65,8 @@ local g_lastMs, g_lastAs = nil, nil  -- last applied setpoints
 local g_godHP, g_godMP = nil, nil    -- locked values for god/mp
 local g_godOn, g_mpOn, g_killOn = false, false, false
 local g_noCDOn = false                    -- no-CD toggle
+local g_goldAddr, g_goldKey = nil, nil   -- live wallet (compact ObscuredInt)
+local g_lastGoldScan = 0                 -- throttle for wallet re-resolve
 local g_fastTimer = nil               -- 60ms combat pin timer
 local g_tmpMem = nil                 -- scratch memory for float<->bits
 local g_tgtSnap = {}                 -- addr -> {t=TotalGameTime, c=os.clock()} for liveness
@@ -432,6 +434,69 @@ function resolveHpMana(save, player)
   return hpOff, manaOff
 end
 
+-- ------------------------------------------------- live gold wallet
+-- The wallet lives inside a raw state buffer (no klass header). Resolved by
+-- anchoring on the cached save JSON string ("{\"Version\":5, UTF-16) which
+-- sits in the same heap region, parsing its "Gold":N value, then sweeping
+-- nearby memory for a compact ObscuredInt pair whose
+-- (hidden - key) XOR key == N. Self-validating: the decoded value must match.
+local function readUTF16Num(addr, maxChars)
+  -- read up to maxChars ASCII digits starting at addr; returns value, charCount
+  local digits, count = {}, 0
+  for i = 0, maxChars - 1 do
+    local v = rdi(addr + i * 2)
+    if not v or v < 48 or v > 57 then break end
+    digits[#digits+1] = v
+    count = count + 1
+  end
+  if count == 0 then return nil, 0 end
+  local num = 0
+  for i = 1, count do num = num * 10 + (digits[i] - 48) end
+  return num, count
+end
+
+local function resolveGoldWallet()
+  local gsl = AOBScan([[22 00 47 00 6F 00 6C 00 64 00 22 00 3A 00]], "+W-C")
+  if not gsl or gsl.Count == 0 then return nil end
+  local goldTag = tonumber(gsl[0], 16)
+  gsl.destroy()
+  -- digits live 7 chars after the opening quote: "Gold":
+  local jsonGold = readUTF16Num(goldTag + 7 * 2, 12)
+  if not jsonGold then return nil end
+  -- anchor: JSON string start marker, sweep from there
+  local jsl = AOBScan([[7B 00 22 00 56 00 65 00 72 00 73 00 69 00 6F 00 6E 00 22 00 3A 00 35 00]], "+W-C")
+  local anchor = goldTag
+  if jsl and jsl.Count > 0 then anchor = tonumber(jsl[0], 16) jsl.destroy() end
+  local lo = anchor - 0x200000
+  if lo < 0x10000 then lo = 0x10000 end
+  -- sweep 8-aligned dword pairs
+  for off = 0, 0x400000, 4 do
+    for _, base in ipairs({ anchor + off, lo + off }) do
+      local h = rdi(base)
+      local k = rdi(base + 4)
+      if h and k and k ~= 0 then
+        local v = ((h - k) % 0x100000000) ~ k
+        if v == jsonGold and jsonGold >= 0 and jsonGold < 1000000000 then
+          return base, k, v
+        end
+      end
+    end
+  end
+  return nil
+end
+
+local function goldDecode(addr)
+  if not addr then return nil end
+  local h = rdi(addr)
+  local k = rdi(addr + 4)
+  if not h or not k then return nil end
+  return ((h - k) % 0x100000000) ~ k
+end
+
+local function goldEncode(addr, key, value)
+  writeInteger(addr, ((value ~ key) + key) % 0x100000000)
+end
+
 -- scan all live Enemy instances (klass header match + sane HP) for one-hit-kill
 local function refreshKillList()
   if not g_cls.Enemy then return nil end
@@ -465,6 +530,8 @@ local ENTRIES = {
   {t = "header", d = "────────── 实时数据（改动立即生效）──────────"},
   {t = "value",  d = "[1] 当前生命", sym = SYM.HP, vt = vtDword},
   {t = "value",  d = "[1] 当前法力", sym = SYM.MANA, vt = vtDword},
+  {t = "value",  d = "[1] 当前金币", sym = SYM.GOLD, vt = vtDword},
+  {t = "value",  d = "[★11s] 金币锁定设定（0=不锁定，>0=锁定此值）", sym = SYM.GOLDSET, vt = vtDword},
   {t = "header", d = "────────── 存档数据（重新读档后生效）──────────"},
   {t = "value",  d = "[2] 等级", sym = SYM.LEVEL, vt = vtDword},
   {t = "value",  d = "[2] 当前经验", sym = SYM.XP, vt = vtDword},
@@ -550,11 +617,13 @@ function registerAll()
     reg(SYM.MPI, g_ctl + 32)
     reg(SYM.KILL, g_ctl + 36)
     reg(SYM.MPSET, g_ctl + 40)
+    reg(SYM.GOLDSET, g_ctl + 48)
     reg(SYM.NOCD, g_ctl + 44)
   end
   local o = g_foff
   if g_player and g_hpOff then reg(SYM.HP, g_player + g_hpOff) else unreg(SYM.HP) end
   if g_player and g_manaOff then reg(SYM.MANA, g_player + g_manaOff) else unreg(SYM.MANA) end
+  if g_goldAddr then reg(SYM.GOLD, g_goldAddr) else unreg(SYM.GOLD) end
   if g_save and o.Level then reg(SYM.LEVEL, g_save + o.Level) else unreg(SYM.LEVEL) end
   if g_save and o.CurrentXP then reg(SYM.XP, g_save + o.CurrentXP) else unreg(SYM.XP) end
   if g_save and o.BaseMaxHealth then reg(SYM.MAXHP, g_save + o.BaseMaxHealth) else unreg(SYM.MAXHP) end
@@ -724,6 +793,20 @@ local function tick()
     end
   end
 
+  -- gold wallet: resolve while a setpoint is active (throttled, self-validating)
+  local goldSetNow = rdi(g_ctl + 48) or 0
+  if goldSetNow > 0 and os.clock() - g_lastGoldScan > 5 then
+    g_lastGoldScan = os.clock()
+    local cur = g_goldAddr and goldDecode(g_goldAddr) or nil
+    if not g_goldAddr or not cur or cur < 0 or cur > 1000000000 then
+      local okG, a, k = pcall(resolveGoldWallet)
+      if okG and a then
+        g_goldAddr, g_goldKey = a, k
+        registerAll()
+      end
+    end
+  end
+
   -- one-hit-kill: throttled full-enemy rescan while enabled
   if g_killOn and os.clock() - g_lastKillScan > 2 then
     g_lastKillScan = os.clock()
@@ -881,8 +964,18 @@ local function startTool()
   g_fastTimer.OnTimer = function()
     if g_stopped then return end
     if getOpenedProcessID() ~= g_pid then return end
-    if not (g_godOn or g_mpOn or g_killOn or g_noCDOn) then return end
+    if not (g_godOn or g_mpOn or g_killOn or g_noCDOn) then
+      local gs = g_ctl and (rdi(g_ctl + 48) or 0) or 0
+      if not (gs > 0) then return end
+    end
     -- no-CD: zero GCD + skill CD + state timer (works even without player pin)
+    -- gold lock: keep wallet at the setpoint (compact ObscuredInt re-encrypt)
+    local goldSet = g_ctl and (rdi(g_ctl + 48) or 0) or 0
+    if goldSet > 0 then
+      if g_goldAddr and goldDecode(g_goldAddr) ~= goldSet then
+        pcall(goldEncode, g_goldAddr, g_goldKey, goldSet)
+      end
+    end
     if g_noCDOn and g_pcc and rdq(g_pcc + 0) == g_cls.PlayerCombatController then
       local pac = rdq(g_pcc + 0x70)
       if pac and pac > 0x10000 then
