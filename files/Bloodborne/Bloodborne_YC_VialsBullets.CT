@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.5 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.6 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -33,6 +33,49 @@
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function locateHP(base)
+  local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
+  if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil end
+  local function le(v) local b1=v%256 v=math.floor(v/256) local b2=v%256 v=math.floor(v/256) local b3=v%256 v=math.floor(v/256) local b4=v%256 return string.format('%02X %02X %02X %02X',b1,b2,b3,b4) end
+  local res=AOBScan(le(cur)..' '..le(mx),'+W-C')
+  if not res then return nil,nil end
+  local cands={}
+  for i=0,math.min(res.Count-1,40) do
+    local a=tonumber(res.getString(i),16)
+    if a and readInteger(a)==cur and readInteger(a+4)==mx then cands[#cands+1]=a end
+  end
+  res.destroy()
+  if #cands==0 then return nil,nil end
+  for _,c in ipairs(cands) do
+    local v0=readInteger(c)
+    writeInteger(c,mx) sleep(150)
+    local mc=readInteger(base+0x154)
+    if mc==mx then return c,mx end
+    writeInteger(c,v0)
+    sleep(60)
+  end
+  return nil,nil
+end
+local function ensureSyms()
+  if getAddressSafe('bb_obj') then return true end
+  local ok,base=pcall(readPointer,0x80553B0E0)
+  if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then return false end
+  registerSymbol('bb_obj',base,true)
+  local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
+  local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
+  local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
+  local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
+  if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
+    registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  else
+    local hcand,hm2=locateHP(base)
+    if hcand then registerSymbol('bb_hp',hcand,true) registerSymbol('bb_hpmax',hcand+4,true)
+      print('[BB] HP relocated 0x'..string.format('%x',hcand)..' '..tostring(hm2)) end
+  end
+  return true
+end
+
 local pid=getOpenedProcessID()
 if pid==0 then print('[BB] attach bb-probe.exe first') return end
 local ok,base=pcall(readPointer,0x80553B0E0)
@@ -74,7 +117,13 @@ if hcur~=nil and hmax~=nil and hcur==mcur and hmax==mmax and mmax&gt;0 and hcur&
   registerSymbol('bb_hpmax',HP_ADDR+4,true)
   print('[BB] HP OK '..tostring(hcur)..'/'..tostring(hmax))
 else
-  print('[BB] HP addr validation failed: hp='..tostring(hcur)..'/'..tostring(hmax)..' mirror='..tostring(mcur)..'/'..tostring(mmax))
+  local hcand,hm2=locateHP(base)
+  if hcand then
+    registerSymbol('bb_hp',hcand,true) registerSymbol('bb_hpmax',hcand+4,true)
+    print('[BB] HP relocated 0x'..string.format('%x',hcand)..' '..tostring(hm2))
+  else
+    print('[BB] HP locate failed: hp='..tostring(hcur)..' mirror='..tostring(mcur)..'/'..tostring(mmax))
+  end
 end
 
 print('[BB] READY  obj=0x'..string.format('%x',base)..'  bullets='..tostring(readInteger(bul))..'  vials='..(via and tostring(readInteger(via)) or 'none')..'  echoes='..tostring(readInteger(base+0x1D4)))
@@ -184,6 +233,29 @@ print('[BB] stopped')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function locateHP(base)
+  local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
+  if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil end
+  local function le(v) local b1=v%256 v=math.floor(v/256) local b2=v%256 v=math.floor(v/256) local b3=v%256 v=math.floor(v/256) local b4=v%256 return string.format('%02X %02X %02X %02X',b1,b2,b3,b4) end
+  local res=AOBScan(le(cur)..' '..le(mx),'+W-C')
+  if not res then return nil,nil end
+  local cands={}
+  for i=0,math.min(res.Count-1,40) do
+    local a=tonumber(res.getString(i),16)
+    if a and readInteger(a)==cur and readInteger(a+4)==mx then cands[#cands+1]=a end
+  end
+  res.destroy()
+  if #cands==0 then return nil,nil end
+  for _,c in ipairs(cands) do
+    local v0=readInteger(c)
+    writeInteger(c,mx) sleep(150)
+    local mc=readInteger(base+0x154)
+    if mc==mx then return c,mx end
+    writeInteger(c,v0)
+    sleep(60)
+  end
+  return nil,nil
+end
 local function ensureSyms()
   if getAddressSafe('bb_obj') then return true end
   local ok,base=pcall(readPointer,0x80553B0E0)
@@ -196,6 +268,10 @@ local function ensureSyms()
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
     registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  else
+    local hcand,hm2=locateHP(base)
+    if hcand then registerSymbol('bb_hp',hcand,true) registerSymbol('bb_hpmax',hcand+4,true)
+      print('[BB] HP relocated 0x'..string.format('%x',hcand)..' '..tostring(hm2)) end
   end
   return true
 end
@@ -229,6 +305,29 @@ print('[BB] infinite bullets OFF')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function locateHP(base)
+  local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
+  if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil end
+  local function le(v) local b1=v%256 v=math.floor(v/256) local b2=v%256 v=math.floor(v/256) local b3=v%256 v=math.floor(v/256) local b4=v%256 return string.format('%02X %02X %02X %02X',b1,b2,b3,b4) end
+  local res=AOBScan(le(cur)..' '..le(mx),'+W-C')
+  if not res then return nil,nil end
+  local cands={}
+  for i=0,math.min(res.Count-1,40) do
+    local a=tonumber(res.getString(i),16)
+    if a and readInteger(a)==cur and readInteger(a+4)==mx then cands[#cands+1]=a end
+  end
+  res.destroy()
+  if #cands==0 then return nil,nil end
+  for _,c in ipairs(cands) do
+    local v0=readInteger(c)
+    writeInteger(c,mx) sleep(150)
+    local mc=readInteger(base+0x154)
+    if mc==mx then return c,mx end
+    writeInteger(c,v0)
+    sleep(60)
+  end
+  return nil,nil
+end
 local function ensureSyms()
   if getAddressSafe('bb_obj') then return true end
   local ok,base=pcall(readPointer,0x80553B0E0)
@@ -241,6 +340,10 @@ local function ensureSyms()
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
     registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  else
+    local hcand,hm2=locateHP(base)
+    if hcand then registerSymbol('bb_hp',hcand,true) registerSymbol('bb_hpmax',hcand+4,true)
+      print('[BB] HP relocated 0x'..string.format('%x',hcand)..' '..tostring(hm2)) end
   end
   return true
 end
@@ -274,6 +377,29 @@ print('[BB] infinite vials OFF')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function locateHP(base)
+  local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
+  if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil end
+  local function le(v) local b1=v%256 v=math.floor(v/256) local b2=v%256 v=math.floor(v/256) local b3=v%256 v=math.floor(v/256) local b4=v%256 return string.format('%02X %02X %02X %02X',b1,b2,b3,b4) end
+  local res=AOBScan(le(cur)..' '..le(mx),'+W-C')
+  if not res then return nil,nil end
+  local cands={}
+  for i=0,math.min(res.Count-1,40) do
+    local a=tonumber(res.getString(i),16)
+    if a and readInteger(a)==cur and readInteger(a+4)==mx then cands[#cands+1]=a end
+  end
+  res.destroy()
+  if #cands==0 then return nil,nil end
+  for _,c in ipairs(cands) do
+    local v0=readInteger(c)
+    writeInteger(c,mx) sleep(150)
+    local mc=readInteger(base+0x154)
+    if mc==mx then return c,mx end
+    writeInteger(c,v0)
+    sleep(60)
+  end
+  return nil,nil
+end
 local function ensureSyms()
   if getAddressSafe('bb_obj') then return true end
   local ok,base=pcall(readPointer,0x80553B0E0)
@@ -286,6 +412,10 @@ local function ensureSyms()
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
     registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  else
+    local hcand,hm2=locateHP(base)
+    if hcand then registerSymbol('bb_hp',hcand,true) registerSymbol('bb_hpmax',hcand+4,true)
+      print('[BB] HP relocated 0x'..string.format('%x',hcand)..' '..tostring(hm2)) end
   end
   return true
 end
@@ -354,7 +484,7 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>30</ID>
-      <Description>"⚠ 锁血走固定地址：勾 [0] 后日志出现 HP OK 才可用，出现 validation failed 说明版本不匹配"</Description>
+      <Description>"⚠ 锁血地址每次启动会变：首次勾选会自动扫描定位（约 1 秒，期间血量会满一下，正常）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
