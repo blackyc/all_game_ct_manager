@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v1.0 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v1.1 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -53,6 +53,16 @@ local function relocateHP(base)
   end
   if #hits==0 then scan(0x010006000000,0x010282000000) end
   if #hits==0 then return nil end
+  local good={}
+  local lim=math.min(#hits,10)
+  for i=1,lim do
+    local a=hits[i] local v0=readInteger(a)
+    writeInteger(a,mm) sleep(60)
+    if readInteger(base+0x154)==mm then good[#good+1]=a end
+    if measure and false then end
+    writeInteger(a,v0)
+  end
+  if #good&gt;0 then hits=good end
   _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
   pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
   registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
@@ -288,6 +298,16 @@ local function relocateHP(base)
   end
   if #hits==0 then scan(0x010006000000,0x010282000000) end
   if #hits==0 then return nil end
+  local good={}
+  local lim=math.min(#hits,10)
+  for i=1,lim do
+    local a=hits[i] local v0=readInteger(a)
+    writeInteger(a,mm) sleep(60)
+    if readInteger(base+0x154)==mm then good[#good+1]=a end
+    if measure and false then end
+    writeInteger(a,v0)
+  end
+  if #good&gt;0 then hits=good end
   _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
   pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
   registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
@@ -394,6 +414,16 @@ local function relocateHP(base)
   end
   if #hits==0 then scan(0x010006000000,0x010282000000) end
   if #hits==0 then return nil end
+  local good={}
+  local lim=math.min(#hits,10)
+  for i=1,lim do
+    local a=hits[i] local v0=readInteger(a)
+    writeInteger(a,mm) sleep(60)
+    if readInteger(base+0x154)==mm then good[#good+1]=a end
+    if measure and false then end
+    writeInteger(a,v0)
+  end
+  if #good&gt;0 then hits=good end
   _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
   pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
   registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
@@ -500,6 +530,16 @@ local function relocateHP(base)
   end
   if #hits==0 then scan(0x010006000000,0x010282000000) end
   if #hits==0 then return nil end
+  local good={}
+  local lim=math.min(#hits,10)
+  for i=1,lim do
+    local a=hits[i] local v0=readInteger(a)
+    writeInteger(a,mm) sleep(60)
+    if readInteger(base+0x154)==mm then good[#good+1]=a end
+    if measure and false then end
+    writeInteger(a,v0)
+  end
+  if #good&gt;0 then hits=good end
   _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
   pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
   registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
@@ -561,23 +601,27 @@ if obj==nil then if not ensureSyms() then print('[BB] pointer check failed') ret
 if _G.BB_HP then _G.BB_HP() end
 local cands=_G.BB_HP_CANDS
 if cands==nil or #cands==0 then cands=relocateHP(obj) end
-local pid=getOpenedProcessID() local fails=0 local lastfix=os.time()
+local pid=getOpenedProcessID() local fails=0 local lastfix=os.time() local stuck=0
 local t=createTimer(nil,false) t.Interval=120
 t.OnTimer=function(x)
  if getOpenedProcessID()~=pid then pcall(function() x.destroy() end) return end
  local mc=readInteger(obj+0x154) local mm=readInteger(obj+0x158)
  if mc==nil or mm==nil then fails=fails+1 if fails&gt;8 then pcall(function() x.destroy() end) end return end
- if mc&gt;=mm then return end
+ if mc&gt;=mm then stuck=0 return end
  local seen=0
  if cands then for _,c in ipairs(cands) do if readInteger(c)==mc then seen=seen+1 end end end
  if seen==0 then
-   if (os.time()-lastfix)&gt;=1 or not cands then
-     lastfix=os.time()
-     cands=relocateHP(obj)
+   if (os.time()-lastfix)&gt;=1 or cands==nil then
+     lastfix=os.time() cands=relocateHP(obj)
    end
    return
  end
+ stuck=0
  for _,c in ipairs(cands) do if readInteger(c)==mc then pcall(writeInteger,c,mm) end end
+ if readInteger(obj+0x154)&lt;mm then
+   stuck=stuck+1
+   if stuck&gt;=5 then stuck=0 cands=nil _G.BB_HP_CANDS=nil print('[BB] lock ineffective - re-locating') end
+ end
 end
 t.Enabled=true
 _G.BB_HP=function() pcall(function() t.destroy() end) t=nil _G.BB_HP=nil end
@@ -618,6 +662,16 @@ local function relocateHP(base)
   end
   if #hits==0 then scan(0x010006000000,0x010282000000) end
   if #hits==0 then return nil end
+  local good={}
+  local lim=math.min(#hits,10)
+  for i=1,lim do
+    local a=hits[i] local v0=readInteger(a)
+    writeInteger(a,mm) sleep(60)
+    if readInteger(base+0x154)==mm then good[#good+1]=a end
+    if measure and false then end
+    writeInteger(a,v0)
+  end
+  if #good&gt;0 then hits=good end
   _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
   pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
   registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
