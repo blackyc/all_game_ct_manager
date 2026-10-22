@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.9 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v1.0 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -33,6 +33,32 @@
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function relocateHP(base)
+  local mc=readInteger(base+0x154) local mm=readInteger(base+0x158)
+  if not mc or not mm or mm&lt;=0 then return nil end
+  local q=mc+mm*4294967296 local hits={}
+  local function scan(lo,hi)
+    local ms=createMemScan()
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.waitTillDone()
+    local fl=createFoundList(ms) fl.initialize()
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    fl.destroy() ms.destroy()
+  end
+  local prev=_G.BB_HP_LAST
+  if prev then
+    local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+    local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+    scan(lo,hi)
+  end
+  if #hits==0 then scan(0x010006000000,0x010282000000) end
+  if #hits==0 then return nil end
+  _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
+  pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
+  registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
+  print('[BB] relocated candidates='..#hits)
+  return hits
+end
 local function locateHP(base,maxTry)
   local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
   if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil,nil end
@@ -242,6 +268,32 @@ print('[BB] stopped')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function relocateHP(base)
+  local mc=readInteger(base+0x154) local mm=readInteger(base+0x158)
+  if not mc or not mm or mm&lt;=0 then return nil end
+  local q=mc+mm*4294967296 local hits={}
+  local function scan(lo,hi)
+    local ms=createMemScan()
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.waitTillDone()
+    local fl=createFoundList(ms) fl.initialize()
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    fl.destroy() ms.destroy()
+  end
+  local prev=_G.BB_HP_LAST
+  if prev then
+    local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+    local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+    scan(lo,hi)
+  end
+  if #hits==0 then scan(0x010006000000,0x010282000000) end
+  if #hits==0 then return nil end
+  _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
+  pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
+  registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
+  print('[BB] relocated candidates='..#hits)
+  return hits
+end
 local function locateHP(base,maxTry)
   local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
   if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil,nil end
@@ -322,6 +374,32 @@ print('[BB] infinite bullets OFF')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function relocateHP(base)
+  local mc=readInteger(base+0x154) local mm=readInteger(base+0x158)
+  if not mc or not mm or mm&lt;=0 then return nil end
+  local q=mc+mm*4294967296 local hits={}
+  local function scan(lo,hi)
+    local ms=createMemScan()
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.waitTillDone()
+    local fl=createFoundList(ms) fl.initialize()
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    fl.destroy() ms.destroy()
+  end
+  local prev=_G.BB_HP_LAST
+  if prev then
+    local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+    local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+    scan(lo,hi)
+  end
+  if #hits==0 then scan(0x010006000000,0x010282000000) end
+  if #hits==0 then return nil end
+  _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
+  pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
+  registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
+  print('[BB] relocated candidates='..#hits)
+  return hits
+end
 local function locateHP(base,maxTry)
   local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
   if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil,nil end
@@ -397,11 +475,37 @@ print('[BB] infinite vials OFF')
     </CheatEntry>
     <CheatEntry>
       <ID>23</ID>
-      <Description>"[30] 锁血（保持满血；换图后先点 [31]）"</Description>
+      <Description>"[30] 锁血（自动跟随换图/重启）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function relocateHP(base)
+  local mc=readInteger(base+0x154) local mm=readInteger(base+0x158)
+  if not mc or not mm or mm&lt;=0 then return nil end
+  local q=mc+mm*4294967296 local hits={}
+  local function scan(lo,hi)
+    local ms=createMemScan()
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.waitTillDone()
+    local fl=createFoundList(ms) fl.initialize()
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    fl.destroy() ms.destroy()
+  end
+  local prev=_G.BB_HP_LAST
+  if prev then
+    local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+    local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+    scan(lo,hi)
+  end
+  if #hits==0 then scan(0x010006000000,0x010282000000) end
+  if #hits==0 then return nil end
+  _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
+  pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
+  registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
+  print('[BB] relocated candidates='..#hits)
+  return hits
+end
 local function locateHP(base,maxTry)
   local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
   if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil,nil end
@@ -456,27 +560,28 @@ local obj=getAddressSafe('bb_obj')
 if obj==nil then if not ensureSyms() then print('[BB] pointer check failed') return end obj=getAddressSafe('bb_obj') end
 if _G.BB_HP then _G.BB_HP() end
 local cands=_G.BB_HP_CANDS
-if cands==nil or #cands==0 then print('[BB] no candidates - tick [31] relocate first') end
-local warned=false
-local pid=getOpenedProcessID() local fails=0
+if cands==nil or #cands==0 then cands=relocateHP(obj) end
+local pid=getOpenedProcessID() local fails=0 local lastfix=os.time()
 local t=createTimer(nil,false) t.Interval=120
 t.OnTimer=function(x)
  if getOpenedProcessID()~=pid then pcall(function() x.destroy() end) return end
  local mc=readInteger(obj+0x154) local mm=readInteger(obj+0x158)
  if mc==nil or mm==nil then fails=fails+1 if fails&gt;8 then pcall(function() x.destroy() end) end return end
- if mc&gt;=mm then warned=false return end
- if cands==nil or #cands==0 then return end
+ if mc&gt;=mm then return end
  local seen=0
- for _,c in ipairs(cands) do if readInteger(c)==mc then seen=seen+1 end end
+ if cands then for _,c in ipairs(cands) do if readInteger(c)==mc then seen=seen+1 end end end
  if seen==0 then
-   if not warned then warned=true print('[BB] HP moved - tick [31] to relocate') end
+   if (os.time()-lastfix)&gt;=1 or not cands then
+     lastfix=os.time()
+     cands=relocateHP(obj)
+   end
    return
  end
  for _,c in ipairs(cands) do if readInteger(c)==mc then pcall(writeInteger,c,mm) end end
 end
 t.Enabled=true
 _G.BB_HP=function() pcall(function() t.destroy() end) t=nil _G.BB_HP=nil end
-print('[BB] keep HP full ON')
+print('[BB] keep HP full ON auto-follow')
 {$asm}
 [DISABLE]
 {$lua}
@@ -488,11 +593,37 @@ print('[BB] keep HP full OFF')
     </CheatEntry>
     <CheatEntry>
       <ID>24</ID>
-      <Description>"[31] 重新定位血量（换地图/重启后点一次）"</Description>
+      <Description>"[31] 手动重新定位（[30] 自动失败时用）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function relocateHP(base)
+  local mc=readInteger(base+0x154) local mm=readInteger(base+0x158)
+  if not mc or not mm or mm&lt;=0 then return nil end
+  local q=mc+mm*4294967296 local hits={}
+  local function scan(lo,hi)
+    local ms=createMemScan()
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.waitTillDone()
+    local fl=createFoundList(ms) fl.initialize()
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    fl.destroy() ms.destroy()
+  end
+  local prev=_G.BB_HP_LAST
+  if prev then
+    local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+    local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+    scan(lo,hi)
+  end
+  if #hits==0 then scan(0x010006000000,0x010282000000) end
+  if #hits==0 then return nil end
+  _G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
+  pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
+  registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
+  print('[BB] relocated candidates='..#hits)
+  return hits
+end
 local function locateHP(base,maxTry)
   local cur=readInteger(base+0x154) local mx=readInteger(base+0x158)
   if cur==nil or mx==nil or mx&lt;=0 or cur&lt;1 or cur&gt;mx then return nil,nil,nil end
@@ -545,35 +676,8 @@ local function ensureSyms()
 end
 local obj=getAddressSafe('bb_obj')
 if obj==nil then if not ensureSyms() then print('[BB] pointer check failed') return end obj=getAddressSafe('bb_obj') end
-local mc=readInteger(obj+0x154) local mm=readInteger(obj+0x158)
-if mc==nil or mm==nil or mm&lt;=0 then print('[BB] bad mirror') return end
-local q=mc+mm*4294967296
-local function scanRange(lo,hi,hits)
-  local ms=createMemScan()
-  ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
-  ms.waitTillDone()
-  local fl=createFoundList(ms) fl.initialize()
-  for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
-  fl.destroy() ms.destroy()
-  return #hits
-end
-local hits={}
-local prev=_G.BB_HP_LAST
-if prev then
-  local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
-  local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
-  scanRange(lo,hi,hits)
-  print('[BB] quick scan window hits='..#hits)
-end
-if #hits==0 then
-  scanRange(0x010006000000,0x010282000000,hits)
-  print('[BB] full scan hits='..#hits)
-end
-if #hits==0 then print('[BB] relocate: nothing found') return end
-_G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
-pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
-registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
-print('[BB] relocated candidates='..#hits..' hp='..tostring(mc)..'/'..tostring(mm))
+local hits=relocateHP(obj)
+if hits then print('[BB] manual relocate OK candidates='..#hits) else print('[BB] relocate failed') end
 {$asm}
 [DISABLE]
 {$lua}
@@ -622,7 +726,7 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>31</ID>
-      <Description>"⚠ 换地图/重启后点一次 [31]：一般 0.4 秒；地址跳太远会自动全量扫描（约 3 秒）"</Description>
+      <Description>"⚠ 锁血自动跟随地址变化（每次约 0.4 秒顿挫）；若日志出现 relocate failed 再点 [31]"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
