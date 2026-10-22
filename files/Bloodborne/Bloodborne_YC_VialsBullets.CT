@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.4 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.5 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -184,8 +184,23 @@ print('[BB] stopped')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function ensureSyms()
+  if getAddressSafe('bb_obj') then return true end
+  local ok,base=pcall(readPointer,0x80553B0E0)
+  if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then return false end
+  registerSymbol('bb_obj',base,true)
+  local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
+  local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
+  local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
+  local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
+  if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
+    registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  end
+  return true
+end
 local addr=getAddressSafe('bb_bullets')
-if addr==nil then print('[BB] run [0] START first') return end
+if addr==nil then if not ensureSyms() then print('[BB] pointer check failed') return end addr=getAddressSafe('bb_bullets') end
 if _G.BB_LB then _G.BB_LB() end
 local pid=getOpenedProcessID() local fails=0
 local t=createTimer(nil,false) t.Interval=150
@@ -214,8 +229,23 @@ print('[BB] infinite bullets OFF')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function ensureSyms()
+  if getAddressSafe('bb_obj') then return true end
+  local ok,base=pcall(readPointer,0x80553B0E0)
+  if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then return false end
+  registerSymbol('bb_obj',base,true)
+  local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
+  local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
+  local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
+  local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
+  if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
+    registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  end
+  return true
+end
 local addr=getAddressSafe('bb_vials')
-if addr==nil then print('[BB] run [0] START first') return end
+if addr==nil then if not ensureSyms() then print('[BB] pointer check failed') return end addr=getAddressSafe('bb_vials') end
 if _G.BB_LV then _G.BB_LV() end
 local pid=getOpenedProcessID() local fails=0
 local t=createTimer(nil,false) t.Interval=150
@@ -244,9 +274,24 @@ print('[BB] infinite vials OFF')
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
+local function ensureSyms()
+  if getAddressSafe('bb_obj') then return true end
+  local ok,base=pcall(readPointer,0x80553B0E0)
+  if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then return false end
+  registerSymbol('bb_obj',base,true)
+  local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
+  local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
+  local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
+  local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
+  if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
+    registerSymbol('bb_hp',0x1001AD56008,true) registerSymbol('bb_hpmax',0x1001AD5600C,true)
+  end
+  return true
+end
 local cur=getAddressSafe('bb_hp')
 local mx=getAddressSafe('bb_hpmax')
-if cur==nil or mx==nil then print('[BB] HP not found - run [0] START first') return end
+if cur==nil or mx==nil then if not ensureSyms() then print('[BB] pointer check failed') return end cur=getAddressSafe('bb_hp') mx=getAddressSafe('bb_hpmax') end
 if _G.BB_HP then _G.BB_HP() end
 local pid=getOpenedProcessID() local fails=0
 local t=createTimer(nil,false) t.Interval=120
@@ -289,7 +334,7 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>26</ID>
-      <Description>"※ 显示 ?? = 还没勾 [0]；等级与属性改完打开一次状态面板刷新"</Description>
+      <Description>"※ 锁定项可直接勾（脚本会自己找地址）；等级与属性改完打开一次状态面板刷新"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
