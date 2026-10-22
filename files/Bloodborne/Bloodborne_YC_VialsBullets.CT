@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.8 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.9 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -548,15 +548,29 @@ if obj==nil then if not ensureSyms() then print('[BB] pointer check failed') ret
 local mc=readInteger(obj+0x154) local mm=readInteger(obj+0x158)
 if mc==nil or mm==nil or mm&lt;=0 then print('[BB] bad mirror') return end
 local q=mc+mm*4294967296
-local ms=createMemScan()
-ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, 0x010006000000, 0x010282000000, '+W-C', fsmAligned, '4', false,false,false,false)
-ms.waitTillDone()
-local fl=createFoundList(ms) fl.initialize()
-local n=fl.getCount() local hits={}
-for i=0,n-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
-fl.destroy() ms.destroy()
+local function scanRange(lo,hi,hits)
+  local ms=createMemScan()
+  ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+  ms.waitTillDone()
+  local fl=createFoundList(ms) fl.initialize()
+  for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+  fl.destroy() ms.destroy()
+  return #hits
+end
+local hits={}
+local prev=_G.BB_HP_LAST
+if prev then
+  local lo=prev-0x40000000 if lo&lt;0x010006000000 then lo=0x010006000000 end
+  local hi=prev+0x40000000 if hi&gt;0x010282000000 then hi=0x010282000000 end
+  scanRange(lo,hi,hits)
+  print('[BB] quick scan window hits='..#hits)
+end
+if #hits==0 then
+  scanRange(0x010006000000,0x010282000000,hits)
+  print('[BB] full scan hits='..#hits)
+end
 if #hits==0 then print('[BB] relocate: nothing found') return end
-_G.BB_HP_CANDS=hits
+_G.BB_HP_CANDS=hits _G.BB_HP_LAST=hits[1]
 pcall(unregisterSymbol,'bb_hp') pcall(unregisterSymbol,'bb_hpmax')
 registerSymbol('bb_hp',hits[1],true) registerSymbol('bb_hpmax',hits[1]+4,true)
 print('[BB] relocated candidates='..#hits..' hp='..tostring(mc)..'/'..tostring(mm))
@@ -608,7 +622,7 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>31</ID>
-      <Description>"⚠ 换地图/重启后血量地址会变：勾一次 [31] 重新定位即可（约 3 秒，建议在安全处点）"</Description>
+      <Description>"⚠ 换地图/重启后点一次 [31]：一般 0.4 秒；地址跳太远会自动全量扫描（约 3 秒）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
