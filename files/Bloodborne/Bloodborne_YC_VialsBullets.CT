@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>0</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.1 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>2</ID>
+      <Description>"① 用法：CE 打开进程 → 选 bb-probe.exe → 勾 [0] → 再勾需要的功能"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>3</ID>
+      <Description>"② 启动（每次进游戏都要勾一次）"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>4</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>5</ID>
+      <Description>"[0] 启动脚本 ← 先勾这个（日志出现 READY 才算成功）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local pid=getOpenedProcessID()
+if pid==0 then print('[BB] attach bb-probe.exe first') return end
+local ok,base=pcall(readPointer,0x80553B0E0)
+if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then print('[BB] pointer check failed - wrong game build?') return end
+local function findItem(id,fb)
+  for off=0,0x2000,4 do
+    local ok2,v=pcall(readInteger,base+off)
+    if ok2 and v==id then return base+off+4,off+4 end
+  end
+  if fb then return base+fb,fb end
+  return nil
+end
+local bul,boff=findItem(0x40000384,0x8B8)
+local via,voff=findItem(0x400003E8,0x8E8)
+if not bul then print('[BB] item table not found') return end
+registerSymbol('bb_obj',base,true)
+registerSymbol('bb_bullets',bul,true)
+if via then registerSymbol('bb_vials',via,true) end
+print('[BB] READY  obj=0x'..string.format('%x',base)..'  bullets +0x'..string.format('%x',boff)..'='..tostring(readInteger(bul))..'  vials '..(via and ('+0x'..string.format('%x',voff)..'='..tostring(readInteger(via))) or 'not owned'))
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.BB_LB then _G.BB_LB() end
+if _G.BB_LV then _G.BB_LV() end
+unregisterSymbol('bb_bullets')
+unregisterSymbol('bb_vials')
+unregisterSymbol('bb_obj')
+print('[BB] stopped')
+{$asm}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>6</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>7</ID>
+      <Description>"③ 数值（双击数值列可直接改）"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>8</ID>
+      <Description>"[1] 水银弹数量"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_bullets</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>9</ID>
+      <Description>"[2] 血瓶数量"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_vials</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>10</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>11</ID>
+      <Description>"④ 一键作弊（勾上即锁定，取消即停止）"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>12</ID>
+      <Description>"[3] 无限水银弹（锁定 20 发）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local addr=getAddressSafe('bb_bullets')
+if addr==nil then print('[BB] run [0] START first') return end
+if _G.BB_LB then _G.BB_LB() end
+local pid=getOpenedProcessID() local fails=0
+local t=createTimer(nil,false) t.Interval=150
+t.OnTimer=function(x)
+ if getOpenedProcessID()~=pid then pcall(function() x.destroy() end) return end
+ local ok,c=pcall(readInteger,addr)
+ if not ok or c==nil then fails=fails+1 if fails&gt;5 then pcall(function() x.destroy() end) end return end
+ if c&lt;20 then pcall(writeInteger,addr,20) end
+end
+t.Enabled=true
+_G.BB_LB=function() pcall(function() t.destroy() end) t=nil _G.BB_LB=nil end
+print('[BB] infinite bullets ON')
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.BB_LB then _G.BB_LB() end
+print('[BB] infinite bullets OFF')
+{$asm}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>13</ID>
+      <Description>"[4] 无限血瓶（锁定 20 瓶）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local addr=getAddressSafe('bb_vials')
+if addr==nil then print('[BB] run [0] START first') return end
+if _G.BB_LV then _G.BB_LV() end
+local pid=getOpenedProcessID() local fails=0
+local t=createTimer(nil,false) t.Interval=150
+t.OnTimer=function(x)
+ if getOpenedProcessID()~=pid then pcall(function() x.destroy() end) return end
+ local ok,c=pcall(readInteger,addr)
+ if not ok or c==nil then fails=fails+1 if fails&gt;5 then pcall(function() x.destroy() end) end return end
+ if c&lt;20 then pcall(writeInteger,addr,20) end
+end
+t.Enabled=true
+_G.BB_LV=function() pcall(function() t.destroy() end) t=nil _G.BB_LV=nil end
+print('[BB] infinite vials ON')
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.BB_LV then _G.BB_LV() end
+print('[BB] infinite vials OFF')
+{$asm}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>14</ID>
+      <Description>"[9] 停止全部（关掉所有锁定）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.BB_LB then _G.BB_LB() end
+if _G.BB_LV then _G.BB_LV() end
+print('[BB] all locks stopped')
+{$asm}
+[DISABLE]
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>15</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>16</ID>
+      <Description>"※ [1][2] 显示 ?? = 还没勾 [0]；勾一次就会出数值"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>17</ID>
+      <Description>"⚠ 数量会写进角色存档，关掉不会退回；只在单人离线时使用"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>18</ID>
+      <Description>"⚠ 只适用 bbport 移植版；PS4 模拟器（shadPS4 等）地址不同，切勿套用"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>19</ID>
+      <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>20</ID>
+      <Description>"===================================================="</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols/>
+</CheatTable>
