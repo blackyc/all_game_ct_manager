@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.3 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.4 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -66,6 +66,17 @@ reg('bb_str',base+0x198,1,99)
 reg('bb_skill',base+0x1A0,1,99)
 reg('bb_blood',base+0x1A8,1,99)
 reg('bb_arc',base+0x1B0,1,99)
+local HP_ADDR=0x1001AD56008
+local hcur,hmax=readInteger(HP_ADDR),readInteger(HP_ADDR+4)
+local mcur,mmax=readInteger(base+0x154),readInteger(base+0x158)
+if hcur~=nil and hmax~=nil and hcur==mcur and hmax==mmax and mmax&gt;0 and hcur&lt;=hmax then
+  registerSymbol('bb_hp',HP_ADDR,true)
+  registerSymbol('bb_hpmax',HP_ADDR+4,true)
+  print('[BB] HP OK '..tostring(hcur)..'/'..tostring(hmax))
+else
+  print('[BB] HP addr validation failed: hp='..tostring(hcur)..'/'..tostring(hmax)..' mirror='..tostring(mcur)..'/'..tostring(mmax))
+end
+
 print('[BB] READY  obj=0x'..string.format('%x',base)..'  bullets='..tostring(readInteger(bul))..'  vials='..(via and tostring(readInteger(via)) or 'none')..'  echoes='..tostring(readInteger(base+0x1D4)))
 {$asm}
 [DISABLE]
@@ -152,16 +163,22 @@ print('[BB] stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>18</ID>
+      <Description>"[11] 当前生命值（只读参考）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_hp</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>19</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>19</ID>
+      <ID>20</ID>
       <Description>"④ 一键作弊（勾上即锁定，取消即停止）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>20</ID>
+      <ID>21</ID>
       <Description>"[21] 无限水银弹（锁定 20 发）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -191,7 +208,7 @@ print('[BB] infinite bullets OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>21</ID>
+      <ID>22</ID>
       <Description>"[22] 无限血瓶（锁定 20 瓶）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -221,7 +238,38 @@ print('[BB] infinite vials OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>22</ID>
+      <ID>23</ID>
+      <Description>"[30] 锁血（保持满血）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local cur=getAddressSafe('bb_hp')
+local mx=getAddressSafe('bb_hpmax')
+if cur==nil or mx==nil then print('[BB] HP not found - run [0] START first') return end
+if _G.BB_HP then _G.BB_HP() end
+local pid=getOpenedProcessID() local fails=0
+local t=createTimer(nil,false) t.Interval=120
+t.OnTimer=function(x)
+ if getOpenedProcessID()~=pid then pcall(function() x.destroy() end) return end
+ local ok,c=pcall(readInteger,cur) local ok2,m=pcall(readInteger,mx)
+ if not ok or not ok2 or c==nil or m==nil then fails=fails+1 if fails&gt;5 then pcall(function() x.destroy() end) end return end
+ if c&lt;m then pcall(writeInteger,cur,m) end
+end
+t.Enabled=true
+_G.BB_HP=function() pcall(function() t.destroy() end) t=nil _G.BB_HP=nil end
+print('[BB] keep HP full ON')
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.BB_HP then _G.BB_HP() end
+print('[BB] keep HP full OFF')
+{$asm}
+</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>24</ID>
       <Description>"[29] 停止全部（关掉所有锁定）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -235,37 +283,42 @@ print('[BB] all locks stopped')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>23</ID>
+      <ID>25</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>24</ID>
+      <ID>26</ID>
       <Description>"※ 显示 ?? = 还没勾 [0]；等级与属性改完打开一次状态面板刷新"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>25</ID>
+      <ID>27</ID>
       <Description>"⚠ 改等级/属性前先备份存档：这些值会写进角色存档且不可回退"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>26</ID>
+      <ID>28</ID>
       <Description>"⚠ 等级与属性一起改：只升属性不升等级会让角色不自洽（等级是独立字段）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>27</ID>
+      <ID>29</ID>
       <Description>"⚠ 只适用 bbport 移植版；PS4 模拟器（shadPS4 等）地址不同，切勿套用"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>28</ID>
+      <ID>30</ID>
+      <Description>"⚠ 锁血走固定地址：勾 [0] 后日志出现 HP OK 才可用，出现 validation failed 说明版本不匹配"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>31</ID>
       <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>29</ID>
+      <ID>32</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
