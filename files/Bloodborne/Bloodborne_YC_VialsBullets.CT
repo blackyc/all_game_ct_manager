@@ -251,16 +251,21 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>26</ID>
-      <Description>"⚠ 只适用 bbport 移植版；PS4 模拟器（shadPS4 等）地址不同，切勿套用"</Description>
+      <Description>"⚠ 等级与属性一起改：只升属性不升等级会让角色不自洽（等级是独立字段）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
       <ID>27</ID>
-      <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
+      <Description>"⚠ 只适用 bbport 移植版；PS4 模拟器（shadPS4 等）地址不同，切勿套用"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
       <ID>28</ID>
+      <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
+      <GroupHeader>1</GroupHeader>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>29</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
