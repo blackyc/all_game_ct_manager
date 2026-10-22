@@ -8,7 +8,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v0.1 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v0.3 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -51,7 +51,22 @@ if not bul then print('[BB] item table not found') return end
 registerSymbol('bb_obj',base,true)
 registerSymbol('bb_bullets',bul,true)
 if via then registerSymbol('bb_vials',via,true) end
-print('[BB] READY  obj=0x'..string.format('%x',base)..'  bullets +0x'..string.format('%x',boff)..'='..tostring(readInteger(bul))..'  vials '..(via and ('+0x'..string.format('%x',voff)..'='..tostring(readInteger(via))) or 'not owned'))
+local ech=base+0x1D4
+local ev=readInteger(ech)
+if ev==nil or ev&lt;0 or ev&gt;999999999 then print('[BB] echoes field looks wrong: '..tostring(ev)) else registerSymbol('bb_echoes',ech,true) end
+local function reg(n,a,lo,hi)
+  local v=readInteger(a)
+  if v==nil or v&lt;lo or v&gt;hi then print('[BB] '..n..' looks wrong: '..tostring(v)) return false end
+  registerSymbol(n,a,true) return true
+end
+reg('bb_level',base+0x1D0,1,600)
+reg('bb_vit',base+0x180,1,99)
+reg('bb_end',base+0x188,1,99)
+reg('bb_str',base+0x198,1,99)
+reg('bb_skill',base+0x1A0,1,99)
+reg('bb_blood',base+0x1A8,1,99)
+reg('bb_arc',base+0x1B0,1,99)
+print('[BB] READY  obj=0x'..string.format('%x',base)..'  bullets='..tostring(readInteger(bul))..'  vials='..(via and tostring(readInteger(via)) or 'none')..'  echoes='..tostring(readInteger(base+0x1D4)))
 {$asm}
 [DISABLE]
 {$lua}
@@ -89,17 +104,65 @@ print('[BB] stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>10</ID>
+      <Description>"[3] 血之回响（上限 999999999）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_echoes</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>11</ID>
+      <Description>"[4] 等级（改完开一次状态面板刷新）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_level</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>12</ID>
+      <Description>"[5] 活力"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_vit</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>13</ID>
+      <Description>"[6] 耐力"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_end</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>14</ID>
+      <Description>"[7] 力量"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_str</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>15</ID>
+      <Description>"[8] 技巧"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_skill</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>16</ID>
+      <Description>"[9] 血质"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_blood</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>17</ID>
+      <Description>"[10] 秘法"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_arc</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>18</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>11</ID>
+      <ID>19</ID>
       <Description>"④ 一键作弊（勾上即锁定，取消即停止）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>12</ID>
-      <Description>"[3] 无限水银弹（锁定 20 发）"</Description>
+      <ID>20</ID>
+      <Description>"[21] 无限水银弹（锁定 20 发）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
@@ -128,8 +191,8 @@ print('[BB] infinite bullets OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>13</ID>
-      <Description>"[4] 无限血瓶（锁定 20 瓶）"</Description>
+      <ID>21</ID>
+      <Description>"[22] 无限血瓶（锁定 20 瓶）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
@@ -158,8 +221,8 @@ print('[BB] infinite vials OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>14</ID>
-      <Description>"[9] 停止全部（关掉所有锁定）"</Description>
+      <ID>22</ID>
+      <Description>"[29] 停止全部（关掉所有锁定）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
@@ -172,32 +235,32 @@ print('[BB] all locks stopped')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>15</ID>
+      <ID>23</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>16</ID>
-      <Description>"※ [1][2] 显示 ?? = 还没勾 [0]；勾一次就会出数值"</Description>
+      <ID>24</ID>
+      <Description>"※ 显示 ?? = 还没勾 [0]；等级与属性改完打开一次状态面板刷新"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>17</ID>
-      <Description>"⚠ 数量会写进角色存档，关掉不会退回；只在单人离线时使用"</Description>
+      <ID>25</ID>
+      <Description>"⚠ 改等级/属性前先备份存档：这些值会写进角色存档且不可回退"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>18</ID>
+      <ID>26</ID>
       <Description>"⚠ 只适用 bbport 移植版；PS4 模拟器（shadPS4 等）地址不同，切勿套用"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>19</ID>
+      <ID>27</ID>
       <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>20</ID>
+      <ID>28</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
