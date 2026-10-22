@@ -42,7 +42,9 @@ local function relocateHP(base)
     ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
-    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
+      if a and not (a&gt;=base and a&lt;base+0x2000) then hits[#hits+1]=a end
+    end
     fl.destroy() ms.destroy()
   end
   scan(base-0x20000000, base+0x20000000)
@@ -284,7 +286,9 @@ local function relocateHP(base)
     ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
-    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
+      if a and not (a&gt;=base and a&lt;base+0x2000) then hits[#hits+1]=a end
+    end
     fl.destroy() ms.destroy()
   end
   scan(base-0x20000000, base+0x20000000)
@@ -397,7 +401,9 @@ local function relocateHP(base)
     ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
-    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
+      if a and not (a&gt;=base and a&lt;base+0x2000) then hits[#hits+1]=a end
+    end
     fl.destroy() ms.destroy()
   end
   scan(base-0x20000000, base+0x20000000)
@@ -510,7 +516,9 @@ local function relocateHP(base)
     ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
-    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
+      if a and not (a&gt;=base and a&lt;base+0x2000) then hits[#hits+1]=a end
+    end
     fl.destroy() ms.destroy()
   end
   scan(base-0x20000000, base+0x20000000)
@@ -604,12 +612,11 @@ t.OnTimer=function(x)
    end
    return
  end
- stuck=0
  for _,c in ipairs(cands) do if readInteger(c)==mc then pcall(writeInteger,c,mm) end end
  if readInteger(obj+0x154)&lt;mm then
    stuck=stuck+1
    if stuck&gt;=5 then stuck=0 cands=nil _G.BB_HP_CANDS=nil print('[BB] lock ineffective - re-locating') end
- end
+ else stuck=0 end
 end
 t.Enabled=true
 _G.BB_HP=function() pcall(function() t.destroy() end) t=nil _G.BB_HP=nil end
@@ -639,7 +646,9 @@ local function relocateHP(base)
     ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
-    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16) if a then hits[#hits+1]=a end end
+    for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
+      if a and not (a&gt;=base and a&lt;base+0x2000) then hits[#hits+1]=a end
+    end
     fl.destroy() ms.destroy()
   end
   scan(base-0x20000000, base+0x20000000)
