@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <CheatTable CheatEngineTableVersion="45">
+  <Forms>
+    <UDF1 Class="TCEForm" Encoding="Ascii85">OJZPP2nldAU:MM2b.}cxWeIh0Gi32eO*Fvk!p7#2nwg$a!d%bD9Fkwae1)ZMJTs+vgE?[f-8r$KBr]vc4XmEkIX??Ah)$$3g?Ma0Kd)d(%x7m$(I!-REJ/Zx000</UDF1>
+  </Forms>
   <CheatEntries>
     <CheatEntry>
       <ID>0</ID>
@@ -8,7 +11,7 @@
     </CheatEntry>
     <CheatEntry>
       <ID>1</ID>
-      <Description>"【血源诅咒 PC】YC 修改表 v1.4 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
+      <Description>"【血源诅咒 PC】YC 修改表 v1.5 ｜ bbport 移植版 ｜ CE 7.5+"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -106,6 +109,7 @@ local function ensureSyms()
   local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
   local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
   local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok8,v8=pcall(readInteger,base+0x1C4) if ok8 and v8 then registerSymbol('bb_insight',base+0x1C4,true) end
   local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
@@ -140,6 +144,9 @@ if via then registerSymbol('bb_vials',via,true) end
 local ech=base+0x1D4
 local ev=readInteger(ech)
 if ev==nil or ev&lt;0 or ev&gt;999999999 then print('[BB] echoes field looks wrong: '..tostring(ev)) else registerSymbol('bb_echoes',ech,true) end
+local ins=base+0x1C4
+local iv=readInteger(ins)
+if iv==nil or iv&lt;0 or iv&gt;9999 then print('[BB] insight field looks wrong: '..tostring(iv)) else registerSymbol('bb_insight',ins,true) end
 local function reg(n,a,lo,hi)
   local v=readInteger(a)
   if v==nil or v&lt;lo or v&gt;hi then print('[BB] '..n..' looks wrong: '..tostring(v)) return false end
@@ -262,16 +269,22 @@ print('[BB] stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>19</ID>
+      <Description>"[12] 洞察（上限 9999）"</Description>
+      <VariableType>4 Bytes</VariableType>
+      <Address>bb_insight</Address>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>20</ID>
       <Description>"===================================================="</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>20</ID>
+      <ID>21</ID>
       <Description>"④ 一键作弊（勾上即锁定，取消即停止）"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
-      <ID>21</ID>
+      <ID>22</ID>
       <Description>"[21] 无限水银弹（锁定 20 发）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -350,6 +363,7 @@ local function ensureSyms()
   local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
   local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
   local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok8,v8=pcall(readInteger,base+0x1C4) if ok8 and v8 then registerSymbol('bb_insight',base+0x1C4,true) end
   local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
@@ -386,7 +400,7 @@ print('[BB] infinite bullets OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>22</ID>
+      <ID>23</ID>
       <Description>"[22] 无限血瓶（锁定 20 瓶）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -465,6 +479,7 @@ local function ensureSyms()
   local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
   local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
   local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok8,v8=pcall(readInteger,base+0x1C4) if ok8 and v8 then registerSymbol('bb_insight',base+0x1C4,true) end
   local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
@@ -501,7 +516,7 @@ print('[BB] infinite vials OFF')
 </AssemblerScript>
     </CheatEntry>
     <CheatEntry>
-      <ID>23</ID>
+      <ID>24</ID>
       <Description>"[30] 锁血（自动跟随换图/重启）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
@@ -580,6 +595,7 @@ local function ensureSyms()
   local ok1,v=pcall(readInteger,base+0x8B8) if ok1 and v then registerSymbol('bb_bullets',base+0x8B8,true) end
   local ok2,v2=pcall(readInteger,base+0x8E8) if ok2 and v2 then registerSymbol('bb_vials',base+0x8E8,true) end
   local ok3,v3=pcall(readInteger,base+0x1D4) if ok3 and v3 then registerSymbol('bb_echoes',base+0x1D4,true) end
+  local ok8,v8=pcall(readInteger,base+0x1C4) if ok8 and v8 then registerSymbol('bb_insight',base+0x1C4,true) end
   local ok4,c=pcall(readInteger,base+0x154) local ok5,m=pcall(readInteger,base+0x158)
   local ok6,hc=pcall(readInteger,0x1001AD56008) local ok7,hm=pcall(readInteger,0x1001AD5600C)
   if ok4 and ok5 and ok6 and ok7 and c==hc and m==hm and m and m&gt;0 then
@@ -630,7 +646,6 @@ print('[BB] keep HP full OFF')
 {$asm}
 </AssemblerScript>
     </CheatEntry>
-    
     <CheatEntry>
       <ID>25</ID>
       <Description>"[29] 停止全部（关掉所有锁定）"</Description>
@@ -677,7 +692,7 @@ print('[BB] all locks stopped')
     </CheatEntry>
     <CheatEntry>
       <ID>32</ID>
-      <Description>"作者 YC ｜ 2026-10-23 ｜ 免费分享，禁止售卖"</Description>
+      <Description>"作者 YC ｜ 2026-10-22 ｜ 免费分享，禁止售卖"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
     <CheatEntry>
@@ -687,4 +702,5 @@ print('[BB] all locks stopped')
     </CheatEntry>
   </CheatEntries>
   <UserdefinedSymbols/>
+  <LuaScript></LuaScript>
 </CheatTable>
