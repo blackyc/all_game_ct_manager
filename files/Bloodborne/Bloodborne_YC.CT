@@ -6,7 +6,7 @@
   <CheatEntries>
 <CheatEntry>
       <ID>1</ID>
-      <Description>"======== 血源修改器 · YC 1.7.0 ========"</Description>
+      <Description>"======== 血源修改器 · YC 1.7.3 ========"</Description>
       <GroupHeader>1</GroupHeader>
     </CheatEntry>
 <CheatEntry>
@@ -22,7 +22,7 @@ local function relocateHP(base)
   local q=mc+mm*4294967296 local hits={}
   local function scan(lo,hi)
     local ms=createMemScan()
-    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '4', false,false,false,false)
+    ms.firstScan(soExactValue, vtQword, rtRounded, string.format('%d',q), nil, lo, hi, '+W-C', fsmAligned, '8', false,false,false,false)
     ms.waitTillDone()
     local fl=createFoundList(ms) fl.initialize()
     for i=0,fl.getCount()-1 do local a=tonumber(fl.getAddress(i),16)
@@ -107,20 +107,38 @@ local pid=getOpenedProcessID()
 if pid==0 then print('[BB] attach bb-probe.exe first') return end
 local ok,base=pcall(readPointer,0x80553B0E0)
 if not ok or not base or base&lt;0x1000000000 or base&gt;=0x2000000000 then print('[BB] pointer check failed - wrong game build?') return end
-local function findItem(id,fb)
-  for off=0,0x2000,4 do
-    local ok2,v=pcall(readInteger,base+off)
-    if ok2 and v==id then return base+off+4,off+4 end
+-- locate item rows by signature inside the item table only (0x8A0..0xCA0).
+-- No fixed-offset fallback: writing to a guessed row is how the wrong item got locked.
+local function u32(v) if v==nil then return nil end if v&lt;0 then return v+4294967296 end return v end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local function rowOk(off,num)
+  local lo=u32(readInteger(base+off))
+  if not lo or lo&lt;0xB0000000 or lo&gt;=0xB0010000 then return false end
+  if lo16(lo)~=num then return false end
+  local hi=u32(readInteger(base+off+4))
+  if not hi or hi16(hi)~=0x4000 or lo16(hi)~=num then return false end
+  local c=readInteger(base+off+8)
+  if not c or c&lt;0 or c&gt;9999 then return false end
+  return true
+end
+local function findItem(num)
+  for r=0,63 do
+    local off=0x8A0+r*0x10
+    if rowOk(off,num) then return base+off+8,off+8,'table' end
   end
-  if fb then return base+fb,fb end
+  for off=0x100,0x4000,4 do
+    if rowOk(off,num) then return base+off+8,off+8,'scan' end
+  end
   return nil
 end
-local bul,boff=findItem(0x40000384,0x8B8)
-local via,voff=findItem(0x400003E8,0x8E8)
-if not bul then print('[BB] item table not found') return end
+local bul,boff,bvia=findItem(900)
+local via,voff,vvia=findItem(1000)
 registerSymbol('bb_obj',base,true)
-registerSymbol('bb_bullets',bul,true)
-if via then registerSymbol('bb_vials',via,true) end
+if bul then registerSymbol('bb_bullets',bul,true) print('[BB] bullets row 0x'..string.format('%x',boff)..' via '..tostring(bvia))
+else print('[BB] WARN bullets row not found - [2] will show ??') end
+if via then registerSymbol('bb_vials',via,true) print('[BB] vials row 0x'..string.format('%x',voff)..' via '..tostring(vvia))
+else print('[BB] WARN vials row not found - [3] will show ??') end
 local ech=base+0x1D4
 local ev=readInteger(ech)
 if ev==nil or ev&lt;0 or ev&gt;999999999 then print('[BB] echoes field looks wrong: '..tostring(ev)) else registerSymbol('bb_echoes',ech,true) end
@@ -194,27 +212,31 @@ print('[BB] all locks stopped')
     </CheatEntry>
 <CheatEntry>
       <ID>5</ID>
-      <Description>"不死模式 ← 血量永不低于 1（社区补丁 Player No Dead，每秒重申一次）"</Description>
+      <Description>"不死模式 ← 血量永不低于 1（社区补丁 Player No Dead，每秒重申一次，定时器显式启用）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_noDead ~= nil then _G.bb_noDead.destroy() _G.bb_noDead = nil end
+if _G.bb_noDead ~= nil then pcall(function() _G.bb_noDead.Enabled=false _G.bb_noDead.destroy() end) _G.bb_noDead = nil end
 writeInteger(0x80553E888, 1)
-local t = createTimer(nil)
+local t = createTimer(nil, false)
 t.Interval = 1000
 t.OnTimer = function()
-  if readInteger(0x80553E888) ~= 1 then writeInteger(0x80553E888, 1) end
+  pcall(function()
+    if readInteger(0x80553E888) ~= 1 then writeInteger(0x80553E888, 1) end
+  end)
 end
+t.Enabled = true          -- MANDATORY: without this the patch is applied once and lost on the next load
 _G.bb_noDead = t
+print("[BB] no-dead ON (re-assert 1Hz)")
 {$asm}
 [DISABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_noDead ~= nil then _G.bb_noDead.destroy() _G.bb_noDead = nil end
+if _G.bb_noDead ~= nil then pcall(function() _G.bb_noDead.Enabled=false _G.bb_noDead.destroy() end) _G.bb_noDead = nil end
 writeInteger(0x80553E888, 0)
-{$asm}
-</AssemblerScript>
+print("[BB] no-dead OFF")
+{$asm}</AssemblerScript>
     </CheatEntry>
 <CheatEntry>
       <ID>6</ID>
@@ -235,221 +257,446 @@ writeInteger(0x80553E888, 0)
     </CheatEntry>
 <CheatEntry>
       <ID>9</ID>
-      <Description>"[4] 无限水银弹（锁定 20 发）"</Description>
+      <Description>"[4] 无限水银弹（锁定当前上限）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_bulletLock ~= nil then _G.bb_bulletLock.destroy() _G.bb_bulletLock = nil end
-local NUM = 900
-local CAP = 20
-local FIX = 2224
-local t = createTimer(nil)
-t.Interval = 30
-t.OnTimer = function()
-  local obj = readPointer(0x80553B0E0)
-  if not obj then return end
-  local mx = readInteger(obj + 0x158)
-  local cur = readInteger(obj + 0x154)
-  if not mx or not cur or mx &lt;= 100 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
-  local id = readInteger(obj + FIX)
-  if id and (id &amp; 0xFFFFFFFF) &gt;= 0xB0000000 and (id &amp; 0xFFFF) == NUM then
-    local c = readInteger(obj + FIX + 8)
-    if c and c &lt; CAP then writeInteger(obj + FIX + 8, CAP) end
-    return
+-- CE/Lua env note: bitwise operators need Lua 5.3; older CE builds raise a syntax
+-- error on `&amp;` and kill the whole chunk, so use arithmetic instead.
+local CEV = "?"
+pcall(function() CEV = tostring(getCEVersion()) end)
+local TBL_BASE, TBL_STRIDE, TBL_ROWS = 0x8A0, 0x10, 64
+local function u32(v)
+  if v == nil then return nil end
+  if v &lt; 0 then return v + 4294967296 end
+  return v
+end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local function rowOk(obj, off, wantNum)
+  local lo = u32(readInteger(obj + off))
+  if not lo or lo &lt; 0xB0000000 or lo &gt;= 0xB0010000 then return false end
+  if wantNum and lo16(lo) ~= wantNum then return false end
+  local hi = u32(readInteger(obj + off + 4))
+  if not hi or hi16(hi) ~= 0x4000 then return false end
+  if wantNum and lo16(hi) ~= wantNum then return false end
+  local c = readInteger(obj + off + 8)
+  if not c or c &lt; 0 or c &gt; 9999 then return false end
+  return true
+end
+-- table first (fast, known layout), then a signature sweep of the whole object
+-- (covers bbport builds that moved the item table)
+local function findRow(obj, num)
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    if rowOk(obj, off, num) then return off, "table" end
   end
-  local empty = 0
-  for r = 0, 63 do
-    local off = 0x8A0 + r * 0x10
-    local lo = readInteger(obj + off)
-    if not lo then return end
-    local v = lo &amp; 0xFFFFFFFF
-    if v == 0 then
-      empty = empty + 1
-      if empty &gt;= 6 then return end
-    else
-      empty = 0
-      if v &gt;= 0xB0000000 and (v &amp; 0xFFFF) == NUM then
-        local c = readInteger(obj + off + 8)
-        if c and c &lt; CAP then writeInteger(obj + off + 8, CAP) end
-        return
-      end
-    end
+  for off = 0x100, 0x4000, 4 do
+    if rowOk(obj, off, num) then return off, "scan" end
+  end
+  return nil, "notfound"
+end
+local function getObj()
+  local ok, o = pcall(readPointer, 0x80553B0E0)
+  if not ok or not o then return nil end
+  if o &lt; 0x1000000000 or o &gt;= 0x800000000000 then return nil end
+  return o
+end
+if _G.bb_bulletLock ~= nil then pcall(function() _G.bb_bulletLock.Enabled=false _G.bb_bulletLock.destroy() end) _G.bb_bulletLock = nil end
+local NUM = 900
+local DEFAULT_CAP = 20
+local CAP = nil
+local CAP_OBJ = nil
+local ROW = nil
+local function snapshot(c)
+  if CAP == nil then
+    if c &gt; DEFAULT_CAP then CAP = c else CAP = DEFAULT_CAP end
+    print("[BB] bullets cap=" .. tostring(CAP))
   end
 end
+local t = createTimer(nil, false)
+t.Interval = 30
+t.OnTimer = function()
+  pcall(function()
+    local obj = getObj()
+    if not obj then return end
+    local mx, cur = readInteger(obj + 0x158), readInteger(obj + 0x154)
+    if not mx or not cur or mx &lt; 10 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
+    if CAP_OBJ ~= obj then
+      -- 换角色/读档：旧上限快照必须作废，否则会把新角色少量库存补成上一个角色的数量
+      CAP, CAP_OBJ, ROW = nil, obj, nil
+    end
+    if CAP_OBJ ~= obj then
+      -- 换角色/读档：旧上限快照必须作废，否则会把新角色少量库存补成上一个角色的数量
+      CAP, CAP_OBJ, ROW = nil, obj, nil
+    end
+    if ROW == nil or not rowOk(obj, ROW, NUM) then
+      ROW = findRow(obj, NUM)
+      if ROW == nil then return end
+      print("[BB] bullets row 0x" .. string.format("%x", ROW))
+    end
+    local c = readInteger(obj + ROW + 8)
+    if not c or c &lt; 0 or c &gt; 9999 then return end
+    snapshot(c)
+    if c &lt; CAP then writeInteger(obj + ROW + 8, CAP) end
+  end)
+end
+t.Enabled = true          -- MANDATORY: a bare createTimer() comes up disabled on some CE builds
 _G.bb_bulletLock = t
+print("[BB] infinite bullets ON (CE " .. CEV .. ")")
 {$asm}
 [DISABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_bulletLock ~= nil then _G.bb_bulletLock.destroy() _G.bb_bulletLock = nil end
+if _G.bb_bulletLock ~= nil then pcall(function() _G.bb_bulletLock.Enabled=false _G.bb_bulletLock.destroy() end) _G.bb_bulletLock = nil end
+print("[BB] infinite bullets OFF")
 {$asm}</AssemblerScript>
     </CheatEntry>
 <CheatEntry>
       <ID>10</ID>
-      <Description>"[5] 无限血瓶（锁定 20 瓶）"</Description>
+      <Description>"[5] 无限血瓶（锁定当前上限）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_vialLock ~= nil then _G.bb_vialLock.destroy() _G.bb_vialLock = nil end
-local NUM = 1000
-local CAP = 20
-local FIX = 2272
-local t = createTimer(nil)
-t.Interval = 30
-t.OnTimer = function()
-  local obj = readPointer(0x80553B0E0)
-  if not obj then return end
-  local mx = readInteger(obj + 0x158)
-  local cur = readInteger(obj + 0x154)
-  if not mx or not cur or mx &lt;= 100 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
-  local id = readInteger(obj + FIX)
-  if id and (id &amp; 0xFFFFFFFF) &gt;= 0xB0000000 and (id &amp; 0xFFFF) == NUM then
-    local c = readInteger(obj + FIX + 8)
-    if c and c &lt; CAP then writeInteger(obj + FIX + 8, CAP) end
-    return
+-- CE/Lua env note: bitwise operators need Lua 5.3; older CE builds raise a syntax
+-- error on `&amp;` and kill the whole chunk, so use arithmetic instead.
+local CEV = "?"
+pcall(function() CEV = tostring(getCEVersion()) end)
+local TBL_BASE, TBL_STRIDE, TBL_ROWS = 0x8A0, 0x10, 64
+local function u32(v)
+  if v == nil then return nil end
+  if v &lt; 0 then return v + 4294967296 end
+  return v
+end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local function rowOk(obj, off, wantNum)
+  local lo = u32(readInteger(obj + off))
+  if not lo or lo &lt; 0xB0000000 or lo &gt;= 0xB0010000 then return false end
+  if wantNum and lo16(lo) ~= wantNum then return false end
+  local hi = u32(readInteger(obj + off + 4))
+  if not hi or hi16(hi) ~= 0x4000 then return false end
+  if wantNum and lo16(hi) ~= wantNum then return false end
+  local c = readInteger(obj + off + 8)
+  if not c or c &lt; 0 or c &gt; 9999 then return false end
+  return true
+end
+-- table first (fast, known layout), then a signature sweep of the whole object
+-- (covers bbport builds that moved the item table)
+local function findRow(obj, num)
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    if rowOk(obj, off, num) then return off, "table" end
   end
-  local empty = 0
-  for r = 0, 63 do
-    local off = 0x8A0 + r * 0x10
-    local lo = readInteger(obj + off)
-    if not lo then return end
-    local v = lo &amp; 0xFFFFFFFF
-    if v == 0 then
-      empty = empty + 1
-      if empty &gt;= 6 then return end
-    else
-      empty = 0
-      if v &gt;= 0xB0000000 and (v &amp; 0xFFFF) == NUM then
-        local c = readInteger(obj + off + 8)
-        if c and c &lt; CAP then writeInteger(obj + off + 8, CAP) end
-        return
-      end
-    end
+  for off = 0x100, 0x4000, 4 do
+    if rowOk(obj, off, num) then return off, "scan" end
+  end
+  return nil, "notfound"
+end
+local function getObj()
+  local ok, o = pcall(readPointer, 0x80553B0E0)
+  if not ok or not o then return nil end
+  if o &lt; 0x1000000000 or o &gt;= 0x800000000000 then return nil end
+  return o
+end
+if _G.bb_vialLock ~= nil then pcall(function() _G.bb_vialLock.Enabled=false _G.bb_vialLock.destroy() end) _G.bb_vialLock = nil end
+local NUM = 1000
+local DEFAULT_CAP = 20
+local CAP = nil
+local CAP_OBJ = nil
+local ROW = nil
+local function snapshot(c)
+  if CAP == nil then
+    if c &gt; DEFAULT_CAP then CAP = c else CAP = DEFAULT_CAP end
+    print("[BB] vials cap=" .. tostring(CAP))
   end
 end
+local t = createTimer(nil, false)
+t.Interval = 30
+t.OnTimer = function()
+  pcall(function()
+    local obj = getObj()
+    if not obj then return end
+    local mx, cur = readInteger(obj + 0x158), readInteger(obj + 0x154)
+    if not mx or not cur or mx &lt; 10 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
+    if ROW == nil or not rowOk(obj, ROW, NUM) then
+      ROW = findRow(obj, NUM)
+      if ROW == nil then return end
+      print("[BB] vials row 0x" .. string.format("%x", ROW))
+    end
+    local c = readInteger(obj + ROW + 8)
+    if not c or c &lt; 0 or c &gt; 9999 then return end
+    snapshot(c)
+    if c &lt; CAP then writeInteger(obj + ROW + 8, CAP) end
+  end)
+end
+t.Enabled = true          -- MANDATORY
 _G.bb_vialLock = t
+print("[BB] infinite vials ON (CE " .. CEV .. ")")
 {$asm}
 [DISABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_vialLock ~= nil then _G.bb_vialLock.destroy() _G.bb_vialLock = nil end
+if _G.bb_vialLock ~= nil then pcall(function() _G.bb_vialLock.Enabled=false _G.bb_vialLock.destroy() end) _G.bb_vialLock = nil end
+print("[BB] infinite vials OFF")
 {$asm}</AssemblerScript>
     </CheatEntry>
 <CheatEntry>
       <ID>11</ID>
-      <Description>"强化材料锁 ← 血石类数量 ≥1 时补到 99（为 0 不动，不凭空造材料）"</Description>
+      <Description>"强化材料锁 ← 血石类补到 99（0 个不造；拥有过后用完也补）"</Description>
       <VariableType>Auto Assembler Script</VariableType>
       <AssemblerScript>[ENABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_stoneLock ~= nil then _G.bb_stoneLock.destroy() _G.bb_stoneLock = nil end
+-- CE/Lua env note: bitwise operators need Lua 5.3; older CE builds raise a syntax
+-- error on `&amp;` and kill the whole chunk, so use arithmetic instead.
+local CEV = "?"
+pcall(function() CEV = tostring(getCEVersion()) end)
+local TBL_BASE, TBL_STRIDE, TBL_ROWS = 0x8A0, 0x10, 64
+local function u32(v)
+  if v == nil then return nil end
+  if v &lt; 0 then return v + 4294967296 end
+  return v
+end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local function rowOk(obj, off, wantNum)
+  local lo = u32(readInteger(obj + off))
+  if not lo or lo &lt; 0xB0000000 or lo &gt;= 0xB0010000 then return false end
+  if wantNum and lo16(lo) ~= wantNum then return false end
+  local hi = u32(readInteger(obj + off + 4))
+  if not hi or hi16(hi) ~= 0x4000 then return false end
+  if wantNum and lo16(hi) ~= wantNum then return false end
+  local c = readInteger(obj + off + 8)
+  if not c or c &lt; 0 or c &gt; 9999 then return false end
+  return true
+end
+-- table first (fast, known layout), then a signature sweep of the whole object
+-- (covers bbport builds that moved the item table)
+local function findRow(obj, num)
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    if rowOk(obj, off, num) then return off, "table" end
+  end
+  for off = 0x100, 0x4000, 4 do
+    if rowOk(obj, off, num) then return off, "scan" end
+  end
+  return nil, "notfound"
+end
+local function getObj()
+  local ok, o = pcall(readPointer, 0x80553B0E0)
+  if not ok or not o then return nil end
+  if o &lt; 0x1000000000 or o &gt;= 0x800000000000 then return nil end
+  return o
+end
+if _G.bb_stoneLock ~= nil then pcall(function() _G.bb_stoneLock.Enabled=false _G.bb_stoneLock.destroy() end) _G.bb_stoneLock = nil end
 local LO, HI, TARGET = 0xB0000B54, 0xB0000D02, 99
 local rows, lastObj, tick = nil, nil, 0
-local function scan(obj)
+local seen = {}
+local function scanTable(obj)
   local out = {}
-  local empty = 0
-  for r = 0, 63 do
-    local off = 0x8A0 + r * 0x10
-    local lo = readInteger(obj + off)
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    local lo = u32(readInteger(obj + off))
     if not lo then return nil end
-    local id = lo &amp; 0xFFFFFFFF
-    if id == 0 then
-      empty = empty + 1
-      if empty &gt;= 8 then break end
+    if lo == 0 then
+      -- keep going: an empty row in the middle is normal
+    elseif not rowOk(obj, off, nil) then
+      -- non-item record (0x808000xx / 0x908000xx / 0xC08000xx ...)
     else
-      empty = 0
-      if id &gt;= LO and id &lt;= HI then out[#out+1] = off end
-    end
-  end
-  return out
-end
-local t = createTimer(nil)
-t.Interval = 100
-t.OnTimer = function()
-  local obj = readPointer(0x80553B0E0)
-  if not obj then return end
-  local mx = readInteger(obj + 0x158)
-  local cur = readInteger(obj + 0x154)
-  if not mx or not cur or mx &lt;= 100 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
-  tick = tick + 1
-  if rows == nil or obj ~= lastObj or tick % 100 == 0 then
-    lastObj = obj
-    rows = scan(obj)
-    if rows == nil then return end
-  end
-  for i = 1, #rows do
-    local a = obj + rows[i] + 8
-    local c = readInteger(a)
-    if c and c &gt;= 1 and c &lt; TARGET then writeInteger(a, TARGET) end
-  end
-end
-_G.bb_stoneLock = t
-{$asm}
-[DISABLE]
-{$lua}
-if syntaxcheck then return end
-if _G.bb_stoneLock ~= nil then _G.bb_stoneLock.destroy() _G.bb_stoneLock = nil end
-{$asm}</AssemblerScript>
-    </CheatEntry>
-<CheatEntry>
-      <ID>12</ID>
-      <Description>"物品无限 ← 除子弹/血瓶外的物品，只要有 1 个就补成 99"</Description>
-      <VariableType>Auto Assembler Script</VariableType>
-      <AssemblerScript>[ENABLE]
-{$lua}
-if syntaxcheck then return end
-if _G.bb_itemLock ~= nil then _G.bb_itemLock.destroy() _G.bb_itemLock = nil end
-local TARGET = 99
-local rows, lastObj, tick = nil, nil, 0
-local function scan(obj)
-  local out = {}
-  local empty = 0
-  for r = 0, 63 do
-    local off = 0x8A0 + r * 0x10
-    local lo = readInteger(obj + off)
-    if not lo then return nil end
-    local id = lo &amp; 0xFFFFFFFF
-    if id == 0 then
-      empty = empty + 1
-      if empty &gt;= 8 then break end
-    else
-      empty = 0
-      local num = id &amp; 0xFFFF
-      if id &gt;= 0xB0000000 and id &lt; 0xB0010000 and num ~= 900 and num ~= 1000 then
-        out[#out+1] = off
+      if lo &gt;= LO and lo &lt;= HI then
+        local c = readInteger(obj + off + 8)
+        if c and c &gt;= 1 then seen[lo] = true end
+        out[#out + 1] = { off = off, id = lo }
       end
     end
   end
   return out
 end
-local t = createTimer(nil)
+local function scanAny(obj)
+  local out = {}
+  for off = 0x100, 0x4000, 4 do
+    local lo = u32(readInteger(obj + off))
+    if lo and lo &gt;= LO and lo &lt;= HI then
+      if rowOk(obj, off, nil) then
+        local c = readInteger(obj + off + 8)
+        if c and c &gt;= 1 then seen[lo] = true end
+        out[#out + 1] = { off = off, id = lo }
+      end
+    end
+  end
+  return out
+end
+local t = createTimer(nil, false)
 t.Interval = 100
 t.OnTimer = function()
-  local obj = readPointer(0x80553B0E0)
-  if not obj then return end
-  local pmax = readInteger(obj + 0x158)
-  local pcur = readInteger(obj + 0x154)
-  if not pmax or not pcur or pmax &lt;= 100 or pmax &gt; 5000 or pcur &lt; 0 or pcur &gt; pmax then return end
-  tick = tick + 1
-  if rows == nil or obj ~= lastObj or tick % 100 == 0 then
-    lastObj = obj
-    rows = scan(obj)
-    if rows == nil then return end
-  end
-  for i = 1, #rows do
-    local a = obj + rows[i] + 8
-    local c = readInteger(a)
-    if c and c &gt;= 1 and c &lt; TARGET then writeInteger(a, TARGET) end
-  end
+  pcall(function()
+    local obj = getObj()
+    if not obj then return end
+    local mx, cur = readInteger(obj + 0x158), readInteger(obj + 0x154)
+    if not mx or not cur or mx &lt; 10 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
+    tick = tick + 1
+    if rows == nil or obj ~= lastObj or tick % 10 == 0 then
+      lastObj = obj
+      rows = scanTable(obj)
+      -- a base offset that lands mid-table returns a PARTIAL table without erroring,
+      -- so treat "suspiciously few rows" as broken too, not just zero
+      if rows == nil or #rows &lt; 8 then
+        local alt = scanAny(obj)
+        if alt and #alt &gt; #(rows or {}) then
+          print("[BB] stones: table partial/moved at 0x8A0, " .. #alt .. " rows via scan")
+          rows = alt
+        end
+      end
+    end
+    for i = 1, #rows do
+      local e = rows[i]
+      local lo = u32(readInteger(obj + e.off))
+      if lo == e.id then
+        local a = obj + e.off + 8
+        local c = readInteger(a)
+        if c and c &gt;= 0 and c &lt; TARGET and (c &gt;= 1 or seen[e.id]) then
+          writeInteger(a, TARGET)
+        end
+      end
+    end
+  end)
 end
-_G.bb_itemLock = t
+t.Enabled = true          -- MANDATORY
+_G.bb_stoneLock = t
+print("[BB] stone lock ON (" .. tostring(rows and #rows or 0) .. " rows, CE " .. CEV .. ")")
 {$asm}
 [DISABLE]
 {$lua}
 if syntaxcheck then return end
-if _G.bb_itemLock ~= nil then _G.bb_itemLock.destroy() _G.bb_itemLock = nil end
+if _G.bb_stoneLock ~= nil then pcall(function() _G.bb_stoneLock.Enabled=false _G.bb_stoneLock.destroy() end) _G.bb_stoneLock = nil end
+print("[BB] stone lock OFF")
+{$asm}</AssemblerScript>
+    </CheatEntry>
+<CheatEntry>
+      <ID>12</ID>
+      <Description>"物品无限 ← 除子弹/血瓶外的物品补到 99（0 个不造；拥有过后用完也补）"</Description>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+-- CE/Lua env note: bitwise operators need Lua 5.3; older CE builds raise a syntax
+-- error on `&amp;` and kill the whole chunk, so use arithmetic instead.
+local CEV = "?"
+pcall(function() CEV = tostring(getCEVersion()) end)
+local TBL_BASE, TBL_STRIDE, TBL_ROWS = 0x8A0, 0x10, 64
+local function u32(v)
+  if v == nil then return nil end
+  if v &lt; 0 then return v + 4294967296 end
+  return v
+end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local function rowOk(obj, off, wantNum)
+  local lo = u32(readInteger(obj + off))
+  if not lo or lo &lt; 0xB0000000 or lo &gt;= 0xB0010000 then return false end
+  if wantNum and lo16(lo) ~= wantNum then return false end
+  local hi = u32(readInteger(obj + off + 4))
+  if not hi or hi16(hi) ~= 0x4000 then return false end
+  if wantNum and lo16(hi) ~= wantNum then return false end
+  local c = readInteger(obj + off + 8)
+  if not c or c &lt; 0 or c &gt; 9999 then return false end
+  return true
+end
+-- table first (fast, known layout), then a signature sweep of the whole object
+-- (covers bbport builds that moved the item table)
+local function findRow(obj, num)
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    if rowOk(obj, off, num) then return off, "table" end
+  end
+  for off = 0x100, 0x4000, 4 do
+    if rowOk(obj, off, num) then return off, "scan" end
+  end
+  return nil, "notfound"
+end
+local function getObj()
+  local ok, o = pcall(readPointer, 0x80553B0E0)
+  if not ok or not o then return nil end
+  if o &lt; 0x1000000000 or o &gt;= 0x800000000000 then return nil end
+  return o
+end
+if _G.bb_itemLock ~= nil then pcall(function() _G.bb_itemLock.Enabled=false _G.bb_itemLock.destroy() end) _G.bb_itemLock = nil end
+local TARGET = 99
+local rows, lastObj, tick = nil, nil, 0
+local seen = {}
+local function skipNum(num) return num == 900 or num == 1000 end
+local function scanTable(obj)
+  local out = {}
+  for r = 0, TBL_ROWS - 1 do
+    local off = TBL_BASE + r * TBL_STRIDE
+    local lo = u32(readInteger(obj + off))
+    if not lo then return nil end
+    if lo ~= 0 and rowOk(obj, off, nil) then
+      if not skipNum(lo16(lo)) then
+        local c = readInteger(obj + off + 8)
+        if c and c &gt;= 1 then seen[lo] = true end
+        out[#out + 1] = { off = off, id = lo }
+      end
+    end
+  end
+  return out
+end
+local function scanAny(obj)
+  local out = {}
+  for off = 0x100, 0x4000, 4 do
+    local lo = u32(readInteger(obj + off))
+    if lo and lo &gt;= 0xB0000000 and lo &lt; 0xB0010000 and not skipNum(lo16(lo)) then
+      if rowOk(obj, off, nil) then
+        local c = readInteger(obj + off + 8)
+        if c and c &gt;= 1 then seen[lo] = true end
+        out[#out + 1] = { off = off, id = lo }
+      end
+    end
+  end
+  return out
+end
+local t = createTimer(nil, false)
+t.Interval = 100
+t.OnTimer = function()
+  pcall(function()
+    local obj = getObj()
+    if not obj then return end
+    local mx, cur = readInteger(obj + 0x158), readInteger(obj + 0x154)
+    if not mx or not cur or mx &lt; 10 or mx &gt; 5000 or cur &lt; 0 or cur &gt; mx then return end
+    tick = tick + 1
+    if rows == nil or obj ~= lastObj or tick % 10 == 0 then
+      lastObj = obj
+      rows = scanTable(obj)
+      if rows == nil or #rows &lt; 8 then
+        local alt = scanAny(obj)
+        if alt and #alt &gt; #(rows or {}) then rows = alt end
+      end
+    end
+    for i = 1, #rows do
+      local e = rows[i]
+      local lo = u32(readInteger(obj + e.off))
+      if lo == e.id then
+        local a = obj + e.off + 8
+        local c = readInteger(a)
+        if c and c &gt;= 0 and c &lt; TARGET and (c &gt;= 1 or seen[e.id]) then
+          writeInteger(a, TARGET)
+        end
+      end
+    end
+  end)
+end
+t.Enabled = true          -- MANDATORY
+_G.bb_itemLock = t
+print("[BB] item lock ON (CE " .. CEV .. ")")
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.bb_itemLock ~= nil then pcall(function() _G.bb_itemLock.Enabled=false _G.bb_itemLock.destroy() end) _G.bb_itemLock = nil end
+print("[BB] item lock OFF")
 {$asm}</AssemblerScript>
     </CheatEntry>
 <CheatEntry>
@@ -892,6 +1139,79 @@ writeBytes(0x80553E88E, 0)
       <Description>"[19] 当前生命值（只读参考）"</Description>
       <VariableType>4 Bytes</VariableType>
       <Address>bb_hp</Address>
+    </CheatEntry>
+      <CheatEntry>
+      <ID>9001</ID>
+      <Description>"[99] 诊断 ← 功能不生效时勾一下，把日志发给作者"</Description>
+      <LastState/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local CEV = "?"
+pcall(function() CEV = tostring(getCEVersion()) end)
+local out = {}
+out[#out + 1] = "==== BB DIAG ===="
+out[#out + 1] = "CE=" .. CEV .. "  Lua=" .. tostring(_VERSION)
+local ok, obj = pcall(readPointer, 0x80553B0E0)
+if not ok or not obj then
+  out[#out + 1] = "obj pointer slot 0x80553B0E0 UNREADABLE -&gt; wrong process or wrong build"
+  print(table.concat(out, "\n"))
+  if _G.bb_diagTimer then pcall(function() _G.bb_diagTimer.Enabled=false _G.bb_diagTimer.destroy() end) _G.bb_diagTimer=nil end
+  return
+end
+out[#out + 1] = string.format("obj=0x%x", obj)
+local hpm, hpc = readInteger(obj + 0x158), readInteger(obj + 0x154)
+out[#out + 1] = string.format("hp=%s/%s  echoes=%s  level=%s",
+  tostring(hpc), tostring(hpm), tostring(readInteger(obj + 0x1D4)), tostring(readInteger(obj + 0x1D0)))
+local function u32(v) if v == nil then return nil end if v &lt; 0 then return v + 4294967296 end return v end
+local function lo16(v) return math.floor(v) % 65536 end
+local function hi16(v) return math.floor(v / 65536) % 65536 end
+local b0, n, other = nil, 0, 0
+for r = 0, 63 do
+  local off = 0x8A0 + r * 0x10
+  local lo = u32(readInteger(obj + off))
+  if lo == nil then break end
+  if lo &gt;= 0xB0000000 and lo &lt; 0xB0010000 then
+    if b0 == nil then b0 = off end
+    n = n + 1
+    local hi = u32(readInteger(obj + off + 4))
+    local c = readInteger(obj + off + 8)
+    if r &lt; 8 or lo16(lo) == 900 or lo16(lo) == 1000 or (lo &gt;= 0xB0000B54 and lo &lt;= 0xB0000D02) then
+      out[#out + 1] = string.format("  r%02d off=0x%x id=0x%08x num=%d cnt=%s hi=0x%08x",
+        r, off, lo, lo16(lo), tostring(c), hi or 0)
+    end
+  elseif lo ~= 0 then
+    other = other + 1
+  end
+end
+out[#out + 1] = string.format("item table @0x8A0: %d item rows, %d non-item rows, first B0 row=%s",
+  n, other, b0 and string.format("0x%x", b0) or "NONE")
+if b0 == nil then
+  out[#out + 1] = "  !! no 0xB0xxxxxx row inside 0x8A0..0xCA0 - table has MOVED in this build"
+  local found = 0
+  for off = 0x100, 0x4000, 4 do
+    local lo = u32(readInteger(obj + off))
+    if lo and lo &gt;= 0xB0000000 and lo &lt; 0xB0010000 then
+      local hi = u32(readInteger(obj + off + 4))
+      if hi and hi16(hi) == 0x4000 then
+        found = found + 1
+        if found &lt;= 10 then out[#out + 1] = string.format("    candidate off=0x%x id=0x%08x cnt=%s",
+          off, lo, tostring(readInteger(obj + off + 8))) end
+      end
+    end
+  end
+  out[#out + 1] = "  scan candidates=" .. found
+end
+print(table.concat(out, "\n"))
+-- keep it one-shot; the entry stays ticked but does nothing more
+if _G.bb_diagTimer then pcall(function() _G.bb_diagTimer.Enabled=false _G.bb_diagTimer.destroy() end) _G.bb_diagTimer=nil end
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if _G.bb_diagTimer then pcall(function() _G.bb_diagTimer.Enabled=false _G.bb_diagTimer.destroy() end) _G.bb_diagTimer=nil end
+{$asm}</AssemblerScript>
     </CheatEntry>
   </CheatEntries>
   <UserdefinedSymbols/>
