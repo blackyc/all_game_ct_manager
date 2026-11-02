@@ -6,14 +6,16 @@
 
 | 游戏 | 版本 | 文件 | 说明 | 发布平台 | 感谢 |
 |---|---|---|---|---|---|
-| VED | 0.0.1865 | VED_YC_CheatTable.CT<br>VED_YC_Lite.CT | 完整版:无限格挡 / 敌人定身 / 商店无限刷新 / 动作速度倍率 | Game Cheats Manager | 社区作者 **ELYSIUM** |
-| ForgeTax | - | ForgeTax_YC.CT | 敲击结果控制:强制大成功(剑永不损坏、价值只增不减) + 剑价值/等级/界面概率显示 | - | - |
-| Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 稳定版:状态显示+数值修改——实时生命/法力、等级/经验/天赋点/基础属性、移速/攻速直写、锁血/MP无限/一击必杀/无CD | - | - |
-| Bloodborne(血源诅咒) | PC 移植版 bbport 0.9.33 (eboot 1.09) | Bloodborne_YC.CT<br>Bloodborne_YC_Trainer.exe(单文件,双击即用) | **v1.7.5**：**不死模式**(血量永不低于 1，换图/过场不失效) / **潜行**(敌人无视你) / **物品不减**(真物品≥1 补 99) / **强化材料**(≥1 补 99) / **补满强化材料**(没有也能补，4 种各 99) / 无限体力 / 无限血瓶 · 无限水银弹 / 回响 · 等级 · 六项属性；**修复血瓶/子弹偶发锁不住**(旧版按固定行号定位，换存档会锁到别的物品上)；**旧「锁血」方案已废弃**；仅适用 bbport 移植版 | GitHub Releases | - |
-| Probably Stolen(深空当铺) | v0.1.0 | ProbablyStolen_YC_Trainer.exe(单文件,双击即用) | **v1.0.0**：26 项功能全可用（资源 / 角色 / 经营 / 提示 / 物品 五组）—— 资金 · 配给站 · 五阵营声望(独立)；运气 · 伤势 · 成瘾 · 拾荒免伤 · 拾荒 99 次；满意度 · 吸引力 · 顾客预算 · 盗窃归零(随机偷+指名偷双路径) · 垃圾惩罚；**火眼金睛**(通缉犯/AI改造人/治安部/执法官… + 假货·估值鉴定浮窗)；净化水 · 电池补满 · 芯片工作量归零 · 一键升级(冰箱/转换器/RAS) · 拾荒不出垃圾；**不需要管理员权限** | - | - |
+| VED | 0.0.1865 | VED_YC_CheatTable.CT<br>VED_YC_Lite.CT | 无限格挡 / 敌人定身 / 商店刷新 / 动作速度 | Game Cheats Manager | 社区作者 **ELYSIUM** |
+| ForgeTax | - | ForgeTax_YC.CT | 敲击强制大成功 + 剑价值显示 | - | - |
+| Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 状态显示 + 数值修改 + 锁血 | - | - |
+| Bloodborne(血源诅咒) | bbport 0.9.33 | Bloodborne_YC.CT<br>Bloodborne_YC_Trainer.exe | 不死 / 潜行 / 物品不减 / 无限体力 / 无限血瓶弹 | GitHub Releases | - |
+| Probably Stolen(深空当铺) | v0.1.0 | ProbablyStolen_YC_Trainer.exe | 26 项:资源 / 角色 / 经营 / 火眼金睛 / 物品 | - | - |
 
 ## 使用
 
 **CT**：Cheat Engine 7.5+ → `Open Process` 附加游戏 → `File → Load` 载入 → 勾选条目
 
-**Trainer(exe)**：直接双击运行，检测到游戏进程后自动连接，若游戏以管理员身份运行，exe 也需要右键「以管理员身份运行」。
+**Trainer(exe)**：双击运行，自动连接游戏；游戏以管理员身份运行时，exe 也需右键以管理员身份运行
+
+各游戏详细说明见 `files/<游戏>/` 目录内的文档。
