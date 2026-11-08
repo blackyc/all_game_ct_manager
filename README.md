@@ -6,13 +6,15 @@
 
 | 游戏 | 版本 | 文件 | 功能 | 平台 | 感谢 |
 |---|---|---|---|---|---|
-| VED | 0.0.1865 | VED_YC_CheatTable.CT<br>VED_YC_Lite.CT | 4 项 | Game Cheats Manager | 社区作者 **ELYSIUM** |
+| VED | 0.0.1886 | VED_YC_Trainer.exe | 12 项 | - | - |
 | ForgeTax | - | ForgeTax_YC.CT | 3 项 | - | - |
 | Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 6 项 | - | - |
 | Bloodborne(血源诅咒) | bbport 0.9.33 | Bloodborne_YC.CT<br>Bloodborne_YC_Trainer.exe | 8 项 | GitHub Releases | - |
-| Probably Stolen(深空当铺) | v0.1.0 | ProbablyStolen_YC_Trainer.exe | 26 项 | - | - |
+| Probably Stolen(深空当铺) | v0.46D | ProbablyStolen_YC_Trainer.exe | 26 项 | - | - |
 
 功能明细见 `files/<游戏>/` 内文档。
+
+> VED 早期 0.0.1865 的两个 CT 仍留在 `files/VED/`，随版本更新可能已失效。
 
 ## 使用
 
