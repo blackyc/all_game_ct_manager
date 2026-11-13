@@ -11,7 +11,7 @@
 | Deskrawl(挂机破坏神) | 1.0.2a | Deskrawl_YC.CT | 6 项 | - | - |
 | Bloodborne(血源诅咒) | bbport 0.9.33 | Bloodborne_YC.CT<br>Bloodborne_YC_Trainer.exe | 8 项 | GitHub Releases | - |
 | Probably Stolen(深空当铺) | v0.46D | ProbablyStolen_YC_Trainer.exe | 26 项 | - | - |
-| Warhammer Survivors(战锤:幸存者) | GOG | WarhammerSurvivors_YC_Trainer.exe | 22 项 | - | - |
+| Warhammer Survivors(战锤:幸存者) | GOG / Steam | WarhammerSurvivors_YC_Trainer.exe | 22 项 | - | - |
 
 功能明细见 `files/<游戏>/` 内文档。
 
