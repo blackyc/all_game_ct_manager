@@ -12,6 +12,7 @@
 | Bloodborne(血源诅咒) | bbport 0.9.33 | Bloodborne_YC.CT<br>Bloodborne_YC_Trainer.exe | 8 项 | GitHub Releases | - |
 | Probably Stolen(深空当铺) | v0.46D | ProbablyStolen_YC_Trainer.exe | 26 项 | - | - |
 | Warhammer Survivors(战锤:幸存者) | GOG / Steam | WarhammerSurvivors_YC_Trainer.exe | 22 项 | - | - |
+| Bayonetta 3(猎天使魔女3) | witchtime 0.9.3 / 本体 1.2.0 | Bayonetta3_YC_RECOM补丁.7z | 27 项 | - | - |
 
 功能明细见 `files/<游戏>/` 内文档。
 
@@ -22,3 +23,5 @@
 **CT**：Cheat Engine 7.5+ → `Open Process` 附加游戏 → `File → Load` 载入 → 勾选条目
 
 **Trainer(exe)**：双击运行，自动连接游戏；游戏以管理员身份运行时，exe 也需右键以管理员身份运行
+
+**RECOM 补丁**：witchtime 移植版专用（补丁已编进 `game.dll`）。压缩包内是源码级材料 + 制作笔记；玩家直接用整合包，进游戏按 **F1** 逐项开关，状态存 `config\graphics.ini`
