@@ -13,6 +13,7 @@
 | Probably Stolen(深空当铺) | v0.46D | ProbablyStolen_YC_Trainer.exe | 26 项 | - | - |
 | Warhammer Survivors(战锤:幸存者) | GOG / Steam | WarhammerSurvivors_YC_Trainer.exe | 22 项 | - | - |
 | Bayonetta 3(猎天使魔女3) | witchtime 0.9.3 / 本体 1.2.0 | Bayonetta3_YC_RECOM补丁.7z | 27 项 | - | - |
+| Frontier Tale(开拓物语) | Build.26751033 (Steam) | FrontierTale_YC_Trainer.exe<br>FrontierTale_YC.CT | 21 项 | - | - |
 
 功能明细见 `files/<游戏>/` 内文档。
 

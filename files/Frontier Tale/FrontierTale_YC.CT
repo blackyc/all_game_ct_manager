@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CheatTable CheatEngineTableVersion="45">
+  <CheatEntries>
+    <CheatEntry>
+      <ID>1</ID>
+      <Description>"[★0] 构建校验（勾一次即可）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+local base = getAddress("GameAssembly.dll")
+if base == nil then
+  showMessage("没找到 GameAssembly.dll。\n请先 Open Process 附加到 FrontierTale.exe。")
+  error("no module")
+end
+local anchors = {
+  { rva = 0xA3BF20, sig = "40 55 53 57 48 8D 6C 24", name = "CharacterCtrl.TakeDamage" },
+  { rva = 0x77F2F0, sig = "48 89 5C 24 10",           name = "MapGatherTriggerHandler.OnHit" },
+}
+local bad = {}
+for _, a in ipairs(anchors) do
+  local want = {}
+  for w in a.sig:gmatch("%x%x") do want[#want + 1] = tonumber(w, 16) end
+  local got = readBytes(base + a.rva, #want, true)
+  local okSig = (got ~= nil) and (#got == #want)
+  if okSig then
+    for i = 1, #want do if got[i] ~= want[i] then okSig = false break end end
+  end
+  if not okSig then
+    local s = {}
+    if got then for i = 1, #got do s[i] = string.format("%02X", got[i]) end end
+    bad[#bad + 1] = string.format("%s\n  期望 %s\n  实际 %s", a.name, a.sig, table.concat(s, " "))
+  end
+end
+if #bad &gt; 0 then
+  showMessage("游戏构建不匹配，本表是按 Build.26751033 做的。\n\n" .. table.concat(bad, "\n\n") ..
+    "\n\n换版本要重新取偏移：GameTrainer/frontiertale/DEV.md §8。")
+  error("build mismatch")
+end
+print(string.format("[FrontierTale] build OK  base=%X", base))
+{$asm}
+[DISABLE]</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>2</ID>
+      <Description>"[1] 无敌（玩家受伤入口直接返回）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+// CharacterCtrl.TakeDamage(BHitResult) -&gt; ret
+GameAssembly.dll+A3BF20:
+db C3
+[DISABLE]
+GameAssembly.dll+A3BF20:
+db 40 55 53 57 48 8D 6C 24</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>3</ID>
+      <Description>"[2] 武器无耐久（不扣耐久、不碎）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+// UserDataManager.ConsumeWeaponDurability(...) -&gt; return true
+GameAssembly.dll+B49840:
+db B0 01 C3
+[DISABLE]
+GameAssembly.dll+B49840:
+db 48 89 5C 24 08</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>4</ID>
+      <Description>"[3] 瞬间搜刮（野外背包搜索秒完成）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+// WildBagUI.GetPickSearchDuration() -&gt; 0.0f
+GameAssembly.dll+9B93B0:
+db 0F 57 C0 C3
+[DISABLE]
+GameAssembly.dll+9B93B0:
+db 48 89 5C 24 08</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>5</ID>
+      <Description>"[4] 堆叠上限 9999"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+// UserDataManager.GetItemMaxStackCount(type,id) -&gt; 9999
+GameAssembly.dll+B50510:
+db B8 0F 27 00 00 C3
+[DISABLE]
+GameAssembly.dll+B50510:
+db 48 89 5C 24 08</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>6</ID>
+      <Description>"[5] 物品数量拉满（背包+仓库已有物品 → 999）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+
+local base = getAddress("GameAssembly.dll")
+local function patq(v)
+  local t = {}
+  for i = 0, 7 do t[#t + 1] = string.format("%02X", (v &gt;&gt; (8 * i)) &amp; 0xFF) end
+  return table.concat(t, " ")
+end
+local function lst(ptr)
+  if not ptr or ptr == 0 then return nil end
+  local it = readQword(ptr + 0x10)
+  local n = readInteger(ptr + 0x18)
+  if not it or not n or n &lt;= 0 or n &gt; 100000 then return nil end
+  return it, n
+end
+local function findCands()
+  local k = readQword(base + 0x47FE158)
+  if not k or k == 0 then return nil, "UserData 类未初始化（先读档进游戏）" end
+  local r = AOBScan(patq(k), "+W-C")
+  if not r then return nil, "没扫到 UserData 实例" end
+  local list = {}
+  for i = 0, r.Count - 1 do
+    local a = tonumber(r.getString(i), 16)
+    local bi = lst(readQword(a + 0x228))
+    local wi = lst(readQword(a + 0x280))
+    local s = readInteger(a + 0x238)
+    local m = readInteger(a + 0xCC)
+    if bi and wi and s and s &gt; 0 and s &lt; 10000 and m and m &gt; 0 and m &lt; 10000 then
+      list[#list + 1] = { addr = a, gt = readQword(a + 0xD0) or 0 }
+    end
+  end
+  r.destroy()
+  if #list == 0 then return nil, "UserData 实例校验全失败" end
+  table.sort(list, function(x, y) return x.gt &gt; y.gt end)
+  return list
+end
+local function findUD()
+  local list, err = findCands()
+  if not list then return nil, err end
+  return list[1].addr
+end
+local function walk(items, n, fn)
+  local chunk, i = 256, 0
+  while i &lt; n do
+    local c = math.min(chunk, n - i)
+    local raw = readBytes(items + 0x20 + i * 8, c * 8, true)
+    if not raw then break end
+    for k = 0, c - 1 do
+      local p = 0
+      for j = 0, 7 do p = p | (raw[k * 8 + j + 1] &lt;&lt; (8 * j)) end
+      if p ~= 0 then fn(p) end
+    end
+    i = i + c
+  end
+end
+
+local u, err = findUD()
+if not u then showMessage(tostring(err)) error("no userdata") end
+local cnt = 0
+for _, off in ipairs({0x228, 0x280}) do
+  local it, n = lst(readQword(u + off))
+  if it then
+    walk(it, n, function(p)
+      local t = readInteger(p + 0x10)
+      local num = readInteger(p + 0x18)
+      if num and num &gt; 0 and t ~= 1 then
+        writeInteger(p + 0x18, 999)
+        cnt = cnt + 1
+      end
+    end)
+  end
+end
+print(string.format("[FrontierTale] 物品数量拉满：%d 件 -&gt; 999", cnt))
+{$asm}
+[DISABLE]</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>7</ID>
+      <Description>"[6] 金币 → 99999"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+
+local base = getAddress("GameAssembly.dll")
+local function patq(v)
+  local t = {}
+  for i = 0, 7 do t[#t + 1] = string.format("%02X", (v &gt;&gt; (8 * i)) &amp; 0xFF) end
+  return table.concat(t, " ")
+end
+local function lst(ptr)
+  if not ptr or ptr == 0 then return nil end
+  local it = readQword(ptr + 0x10)
+  local n = readInteger(ptr + 0x18)
+  if not it or not n or n &lt;= 0 or n &gt; 100000 then return nil end
+  return it, n
+end
+local function findCands()
+  local k = readQword(base + 0x47FE158)
+  if not k or k == 0 then return nil, "UserData 类未初始化（先读档进游戏）" end
+  local r = AOBScan(patq(k), "+W-C")
+  if not r then return nil, "没扫到 UserData 实例" end
+  local list = {}
+  for i = 0, r.Count - 1 do
+    local a = tonumber(r.getString(i), 16)
+    local bi = lst(readQword(a + 0x228))
+    local wi = lst(readQword(a + 0x280))
+    local s = readInteger(a + 0x238)
+    local m = readInteger(a + 0xCC)
+    if bi and wi and s and s &gt; 0 and s &lt; 10000 and m and m &gt; 0 and m &lt; 10000 then
+      list[#list + 1] = { addr = a, gt = readQword(a + 0xD0) or 0 }
+    end
+  end
+  r.destroy()
+  if #list == 0 then return nil, "UserData 实例校验全失败" end
+  table.sort(list, function(x, y) return x.gt &gt; y.gt end)
+  return list
+end
+local function findUD()
+  local list, err = findCands()
+  if not list then return nil, err end
+  return list[1].addr
+end
+local function walk(items, n, fn)
+  local chunk, i = 256, 0
+  while i &lt; n do
+    local c = math.min(chunk, n - i)
+    local raw = readBytes(items + 0x20 + i * 8, c * 8, true)
+    if not raw then break end
+    for k = 0, c - 1 do
+      local p = 0
+      for j = 0, 7 do p = p | (raw[k * 8 + j + 1] &lt;&lt; (8 * j)) end
+      if p ~= 0 then fn(p) end
+    end
+    i = i + c
+  end
+end
+
+local list, err = findCands()
+if not list then showMessage(tostring(err)) error("no userdata") end
+local n = 0
+for _, c in ipairs(list) do
+  writeInteger(c.addr + 0x204, 99999)
+  n = n + 1
+end
+print(string.format("[FrontierTale] 金币 -&gt; 99999（写了 %d 个候选，gameTime 最大的那个是活实例）", n))
+{$asm}
+[DISABLE]</AssemblerScript>
+    </CheatEntry>
+    <CheatEntry>
+      <ID>8</ID>
+      <Description>"[7] 饱食度不降（每秒锁满）"</Description>
+      <Options moHideChildren="1"/>
+      <VariableType>Auto Assembler Script</VariableType>
+      <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+
+local base = getAddress("GameAssembly.dll")
+local function patq(v)
+  local t = {}
+  for i = 0, 7 do t[#t + 1] = string.format("%02X", (v &gt;&gt; (8 * i)) &amp; 0xFF) end
+  return table.concat(t, " ")
+end
+local function nameOf(obj)
+  if not obj or obj == 0 then return nil end
+  local k = readQword(obj)
+  if not k or k == 0 then return nil end
+  local np = readQword(k + 0x10)
+  if not np or np == 0 then return nil end
+  return readString(np, 40)
+end
+-- 玩家定位：CharacterVitals 里 HP 字段指向 VitalAttribute`1 的那个，它的 ctrl 就是玩家
+local function findPlayer()
+  local kv = readQword(base + 0x48543A8)
+  if not kv or kv == 0 then return nil end
+  local r = AOBScan(patq(kv), "+W-C")
+  if not r then return nil end
+  local found
+  for i = 0, r.Count - 1 do
+    local h = tonumber(r.getString(i), 16)
+    local hp = readQword(h + 0x10)
+    local n = hp and nameOf(hp)
+    if n and string.find(n, "VitalAttribute") then
+      local ctrl = readQword(h + 0x40)
+      if ctrl and nameOf(ctrl) == "CharacterCtrl" then found = ctrl break end
+    end
+  end
+  r.destroy()
+  return found
+end
+
+FT_SAT_CTRL = findPlayer()
+if not FT_SAT_CTRL then showMessage("没找到玩家：先进游戏场景") error("no player") end
+if FT_SAT_TIMER then FT_SAT_TIMER.destroy() end
+FT_SAT_TIMER = createTimer(nil)
+FT_SAT_TIMER.Interval = 500
+FT_SAT_TIMER.OnTimer = function()
+  -- 注意：OnTimer 里绝不能做 AOBScan（全内存扫描会把 CE 卡死）。
+  -- 缓存的 ctrl 失效（换存档/重启）就直接停写，让用户重新勾选本条目。
+  local ok = pcall(function()
+    local ctrl = FT_SAT_CTRL
+    if not ctrl or nameOf(ctrl) ~= "CharacterCtrl" then
+      return
+    end
+    local mod = readQword(ctrl + 0xA8)
+    if not mod or mod == 0 then return end
+    local cfg = readQword(mod + 0x18)
+    local data = readQword(mod + 0x20)
+    if not cfg or cfg == 0 or not data or data == 0 then return end
+    local mx = readFloat(cfg + 0x10)
+    if mx and mx &gt; 0 then
+      writeFloat(data + 0x10, mx)
+      writeFloat(data + 0x14, 0)
+    end
+  end)
+end
+FT_SAT_TIMER.Enabled = true
+print("[FrontierTale] 饱食度锁定已开")
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+if FT_SAT_TIMER then FT_SAT_TIMER.destroy() FT_SAT_TIMER = nil end
+print("[FrontierTale] 饱食度锁定已关")
+{$asm}</AssemblerScript>
+    </CheatEntry>
+  </CheatEntries>
+  <UserdefinedSymbols/>
+</CheatTable>
